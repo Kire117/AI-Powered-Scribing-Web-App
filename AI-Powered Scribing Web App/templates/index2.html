@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Medical Assistant</title>
+</head>
+<body>
+    <h1>Medical Conversation Transcription</h1>
+    <form method="POST" action="/transcribe">
+        <button type="submit">Start Recording</button>
+    </form>
+
+    <div id="results">
+        <h2>Transcript</h2>
+        <pre id="transcript"></pre>
+
+        <h2>HPI Summary</h2>
+        <pre id="summary"></pre>
+
+        <h2>Physical Exam</h2>
+        <pre id="physical_exam"></pre>
+    </div>
+
+    <script>
+        document.querySelector("form").addEventListener("submit", async function (e) {
+            e.preventDefault();
+            const res = await fetch("/transcribe", { method: "POST" });
+            const data = await res.json();
+            document.getElementById("transcript").textContent = data.transcript || "";
+            document.getElementById("summary").textContent = data.summary || "";
+            document.getElementById("physical_exam").textContent = data.physical_exam || data.error || "No exam generated.";
+        });
+    </script>
+</body>
+</html>

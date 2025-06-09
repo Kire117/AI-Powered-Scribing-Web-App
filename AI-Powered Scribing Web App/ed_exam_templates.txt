@@ -1,0 +1,135 @@
+### Normal:
+General: Appears well and non-toxic.
+Neuro: Alert and oriented x3, normal phonation. moving extremities x4.
+HEENT: Normal, moist oropharynx.
+Cardio: Normal heart sounds without murmur.
+Resp: Lungs clear bilaterally without adventitious sounds.
+No accessory muscle use.
+Abdo: Soft, non-tender. No rebound or guarding. No CVA tenderness.
+Extremities:
+Cap refill <2 seconds, pulses intact.
+No pedal edema.
+
+
+### HEENT:
+General: Appears well.
+Neuro: Alert and oriented x3, normal phonation. moving extremities x4.
+HEENT: No ocular injection or exudate. No proptosis.
+Normal extraocular movements. PERRLA.
+No periorbital edema or erythema.
+No frank rhinorrhea or nasal crusting.
+No tonsillar swelling or exudate.
+No peritonsillar swelling. Uvula midline.
+No tragus or pinna tenderness.
+Normal TMs without opacification or bulging.
+No mastoid tenderness.
+No head and neck lymphadenopathy/mass.
+Adequate neck ROM with no neck/spine tenderness.
+Cardio: Normal heart sounds without murmur.
+Resp: No audible stridor. Lungs clear bilaterally without adventitious sounds.
+Abdo: Soft, non-tender.
+Lower ext: No edema bilaterally.
+
+### Lumbar:
+General: Appears well.
+Neuro: Alert, normal phonation, moving extremities x4.
+Lower back: No deformity or skin changes.
+No spinal point tenderness.
+No paraspinal tenderness bilaterally.
+Range of motion for flexion, extension, and rotation preserved.
+Normal (5/5) strength bilaterally for hip flexion (L2), knee extension (L3),
+ankle dorsiflexion (L4), great toe extension (L5), ankle plantarflexion (S1),
+and knee flexion (S2)
+Normal and symmetric sensation in lower extremities bilaterally.
+Normal (+2) patellar and Achilles reflexes bilaterally.
+Pulses intact legs bilaterally.
+Straight leg raise negative bilaterally.
+Normal gait without antalgia.
+DRE deferred.
+
+### MaleGU:
+General: Appears well.
+Neuro: Alert, normal phonation. moving extremities x4.
+Abdo: Soft, non-tender.
+GU: No external genital lesions noted.
+No frank penile discharge.
+No testicular swelling.
+No high riding testes. No transverse lie.
+No testicular or epididymal tenderness.
+Testicles soft to palpation.
+Cremasteric reflex present bilaterally. No perineal tenderness.
+DRE deferred.
+
+
+### MSE:
+General: Alert, no apparent distress, no apparent intoxication, well-groomed, dressed appropriately.
+Behaviour: Calm, cooperative.
+Neurological: A&Ox3, CN II-XII intact, normal balance, normal coordination, power/sensation normal bilateral, gait normal.
+Speech: Normal in tone, volume, fluency and speed.
+Mental status: Euthymic, congruent affect, no evidence of mania, thought process normal, no suicidal ideation, no homicidal ideation.
+Perception: No delusions, no illusions, no auditory/visual/somatic hallucinations, not responding to internal stimuli.
+Insight: Adequate
+Judgment: Fair
+Cognition: Not formally tested but grossly intact
+
+
+### MSK:
+Looks well. range of motion and strength adequate. neurovascular intact. no open wound. no swelling or deformities. no bony tenderness. Joint above and below intact. Ligamentous testing intact.
+
+
+### Neuro:
+General: Appears well. Alert and oriented x3. No aphasia. No hemispatial neglect.
+Cranial nerves: Visual fields, extraocular movements intact bilaterally, no nystagmus (II, III, IV, VI).
+PERRLA, no eyelid ptosis (III), Facial sensation intact bilaterally, able to clench jaw bilaterally (V)
+Symmetric facial muscle movements, no droop (VII).
+Hearing grossly normal with a conversational tone (VIII). Phonation intact (IX, X).
+Shoulder shrug and head rotation intact bilaterally (XI). Tongue protrusion intact (XII).
+Motor: 5/5 power bilaterally in major joints of upper and lower extremities. Normal tone without any involuntary movements (i.e. tremors, jerks,etc).
+Sensation: Intact sensation bilaterally in upper and lower extremities.
+Reflexes: 2+ biceps, patellar, achilles bilaterally.
+Cerebellar: Normal gait. Normal rapid alternating movements. No postural instability.
+No basal skull fracture signs.
+No C-spine tenderness, range of motion adequate.
+Oropharynx: Normal, moist oropharynx.
+Cardio: Normal heart sounds without murmur.
+Resp: Lungs clear bilaterally without adventitious sounds.
+Abdo: Soft, non-tender.
+Lower ext: No edema bilaterally.
+
+### Ocular:
+General: Appears well.
+Neuro: Alert, normal phonation. moving extremities x4.
+Eyes: Acuity Rt 20/20, Lt 20/20.
+PERLLA without RAPD.
+Normal visual fields. Normal EOMs and alignment.
+No injection. No exudate. No hyphema, hypopyon, or iritis. No anterior chamber cells or flares.
+Lids: No stye. Eversion of lids do not reveal any lesion or FB.
+Fluoroscein: no abnormal uptake, FB or extravasation of fluid.
+Tonometry: deferred.
+
+### Trauma:
+General: Appears well.
+Neuro: GCS 15, normal phonation. moving extremities x4.
+HEENT: No sign of scalp, facial, or jaw injury. Orbits/eyes appear grossly intact.
+PERLLA. No hyphema.
+No signs of basilar, open or depressed skull fracture.
+No evidence of oropharyngeal injury.
+No facial bleeding or discharge
+Neck: Trachea midline.
+No jugular venous distension.
+No C-spine tenderness, range of motion intact.
+Cardio: Normal heart sounds without murmur.
+Resp: Lungs clear bilaterally.
+No increased work of breathing.
+Chest: No sign of injury.
+No subcutaneous emphysema.
+Symmetric respirations.
+Abdo: No sign of injury. Soft, non-tender.
+Pelvis: Stable. No sign of injury.
+Back: No step deformity or spinal tenderness T-L-S spine. No other signs of injury.
+Rt upper ext: No sign of injury. Range of motion, neurovascular status intact.
+Lt upper ext: No sign of injury. Range of motion, neurovascular status intact.
+Rt lower ext: No sign of injury. Range of motion, neurovascular status intact.
+Lt lower ext: No sign of injury. Range of motion, neurovascular status intact.
+GU and Rectal: Not assessed.
+E-FAST: Not assessed.

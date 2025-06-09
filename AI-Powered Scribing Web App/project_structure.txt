@@ -1,0 +1,10 @@
+scribe_app/
+│
+├── app.py                # Archivo principal de Flask
+├── templates/
+│   └── index.html        # Página web para grabar y ver resultados
+├── static/
+│   └── style.css         # (Opcional) Estilos CSS
+├── .env                  # Variables secretas como API Key
+├── requirements.txt      # Bibliotecas necesarias
+└── README.md             # Explicación del proyecto

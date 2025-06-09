@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Scribe App</title>
+</head>
+
+<body>
+    <h1>AI-POWERED Scribing Web App</h1>
+    <button onclick="startRecording()"> Start recording</button>
+    <p><strong>Transcription:</strong> <span id="transcript"></span></p>
+    <p><strong>Summary (HPI):</strong> <span id="summary"></span></p>
+    <p><strong>Physical Examination Template:</strong> <span id="template"></span></p>
+
+    <script>
+        function startRecording(){
+            fetch('/transcribe', {method: 'POST'})
+                .then(response => response.json())
+                .then(data =>{
+                    if(data.error){
+                        alert(data.error)
+                    }else{
+                        document.getElementById('transcript').textContent = data.transcript;
+                        document.getElementById('summary').textContent = data.summary;
+                        document.getElementById('template').textContent = data.template;
+                    }
+                });
+        }
+    </script>
+</body>
+</html>

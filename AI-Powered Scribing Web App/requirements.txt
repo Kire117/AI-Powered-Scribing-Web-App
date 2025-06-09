@@ -1,0 +1,5 @@
+Flask==2.3.2
+SpeechRecognition==3.10.0
+pydub==0.25.1
+openai
+python-dotenv==1.0.1
