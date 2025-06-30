@@ -30,6 +30,10 @@ MEDICAL_VOCAB = {
     "tx": "treatment",
     "sx": "symptoms",
     "dx": "diagnosis",
+    "Urti": "upper respiratory tract infection",
+    "SOB" : "shortness of breath",
+    "WOB" : "work of breathing",
+    "gu" : "genitourinary",
 
     # Emergency Department Essentials
     "aox3": "alert and oriented to person, place, and time",
@@ -59,6 +63,11 @@ MEDICAL_VOCAB = {
     "etoh abuse": "alcohol abuse",
     "etoh intox": "alcohol intoxication",
     "n/v": "nausea and vomiting",
+    "Perc": "perc pulmonary embolism rule out criteria ",
+    "Acs" : "acute coronary syndrome",
+    "C-spine" : "cervical spine",
+    "GP" : "general practitioner",
+
 
     # Vital Signs/Assessments
     "vss": "vital signs stable",
@@ -70,6 +79,7 @@ MEDICAL_VOCAB = {
     "spo2": "oxygen saturation",
     "fio2": "fraction of inspired oxygen",
     "wnl": "within normal limits",
+    "PERLA" : "pupils equal and reactive to light and accommodation",
 
     # Labs/Tests
     "cbc": "complete blood count",
@@ -138,7 +148,7 @@ MEDICAL_VOCAB = {
     "ros": "review of systems",
     "pmhx": "past medical history",
     "pshx": "past surgical history",
-    "fhx": "family history",
+    "Fmhx": "family history",
     "shx": "social history",
 
     # Toronto & Ontario-Specific
@@ -147,7 +157,10 @@ MEDICAL_VOCAB = {
     "tgh": "Toronto General Hospital",
     "sunnybrook": "Sunnybrook Health Sciences Centre",
     "uh": "University Hospital",
-    "mts": "Canadian Triage and Acuity Scale"
+    "mts": "Canadian Triage and Acuity Scale",
+
+    #MEDS?
+    "NSAID":"non steroidal anti inflammatory drug"
 }
 
 def normalize_medical_terms(text):
