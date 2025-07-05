@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
@@ -7,6 +8,9 @@ from dotenv import load_dotenv
 from together import Together
 import wave
 import io
+
+# import custom template mapper
+from template_mapper import TemplateMapper
 
 # Load env variables
 load_dotenv()
@@ -21,19 +25,23 @@ is_recording = False
 recorded_audio = None
 recognizer = sr.Recognizer()
 
+# initialize the template mapper
+template_mapper = TemplateMapper()
+
 @app.route('/')
 def index():
     return render_template('index3.html')
 
 @app.route('/start_recording', methods=['POST'])
 def start_recording():
-    global recording_thread, is_recording, recorded_audio
+    global recording_thread, is_recording, recorded_audio, stop_requested
     
     if is_recording:
         return jsonify({"error": "Already recording"})
     
     try:
         is_recording = True
+        stop_requested = False
         recorded_audio = None
         
         # Start recording in a separate thread
@@ -48,13 +56,13 @@ def start_recording():
 
 @app.route('/stop_recording', methods=['POST'])
 def stop_recording():
-    global is_recording, recorded_audio, recording_thread
+    global is_recording, stop_requested, recorded_audio, recording_thread
     
     if not is_recording:
         return jsonify({"error": "Not currently recording"})
     
     # Stop recording
-    is_recording = False
+    stop_requested = True
     
     # Wait for recording thread to finish
     if recording_thread:
@@ -71,12 +79,19 @@ def stop_recording():
         
         # Generate summary and template
         summary = summarize_hpi(text)
-        exam_template = insert_physical_exam(text)
+        # exam_template = insert_physical_exam(text)
+        template_analysis = template_mapper.analyze_transcript(text)
         
         return jsonify({
             "transcript": text, 
             "summary": summary, 
-            "template": exam_template
+            "template": template_analysis['template_text'],
+            "template_info": {
+                "selected_template": template_analysis['best_template'],
+                "confidence": template_analysis['confidence'],
+                "top_matches": template_analysis['top_matches'],
+                "transcript_length": template_analysis['transcript_length']
+            }
         })
     
     except sr.UnknownValueError:
@@ -85,10 +100,28 @@ def stop_recording():
         return jsonify({"error": f"Error with speech recognition service: {e}"})
     except Exception as e:
         return jsonify({"error": str(e)})
+    
+@app.route('/available_templates', methods=['GET'])
+def get_available_templates():
+    """Get list of available templates for debugging/info purposes."""
+    templates = template_mapper.get_available_templates()
+    return jsonify({"templates": templates})
+
+@app.route('/test_template_mapping', methods=['POST'])
+def test_template_mapping():
+    """Test endpoint for template mapping - useful for debugging."""
+    data = request.get_json()
+    test_text = data.get('text', '')
+    
+    if not test_text:
+        return jsonify({"error": "No text provided"})
+    
+    analysis = template_mapper.analyze_transcript(test_text)
+    return jsonify(analysis)
 
 def record_audio():
     """Function to record audio continuously until stopped"""
-    global is_recording, recorded_audio, recognizer
+    global is_recording, recorded_audio, recognizer, stop_requested
     
     try:
         mic = sr.Microphone()
@@ -101,7 +134,7 @@ def record_audio():
         audio_data = []
         
         with mic as source:
-            while is_recording:
+            while is_recording and not stop_requested:
                 try:
                     # Record in short chunks
                     chunk = recognizer.listen(source, timeout=1, phrase_time_limit=1)
@@ -111,13 +144,16 @@ def record_audio():
                     continue
         
         # Combine all audio chunks
-        if audio_data:
+        if stop_requested and audio_data:
             # Combine WAV data
             combined_wav = combine_wav_data(audio_data)
             recorded_audio = sr.AudioData(combined_wav, source.SAMPLE_RATE, source.SAMPLE_WIDTH)
             print("Recording stopped and saved")
         else:
             print("No audio data recorded")
+            recorded_audio = None
+            
+        is_recording = False
             
     except Exception as e:
         print(f"Error during recording: {e}")
@@ -143,15 +179,21 @@ def combine_wav_data(wav_data_list):
 
 def summarize_hpi(transcript):
     """Generate HPI summary using AI"""
-    prompt = f"Summarize the following clinical conversation as a history of present illness (HPI):\n{transcript}"
+    prompt = f"""
+    Summarize the following clinical conversation as a history of present illness (HPI).
+    Focus on the chief complaint, onset, duration, quality, severity, and associated symptoms. 
+    Add the appropriate examination template ['Normal', 'HEENT', 'Lumbar', 'MaleGU', 'MSE', 'MSK', 'Neuro', 'Ocular', 'Trauma']
     
+    Transcript: {transcript}
+    """
+
     try:
         response = client.chat.completions.create(
             model="Qwen/Qwen3-235B-A22B-fp8-tput",  
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a physician in an emergency department writing a clinical history of present illness (HPI) in a professional, clear, and concise manner."
+                    "content": "You are a physician in an emergency department writing a clinical history of present illness (HPI) in a professional, clear, and concise manner. Include relevant details about onset, location, duration, character, alleviating/aggravating factors, radiation, timing, and severity."
                 },
                 {
                     "role": "user",
@@ -165,8 +207,13 @@ def summarize_hpi(transcript):
         return f"Error generating summary: {str(e)}"
 
 def insert_physical_exam(text):
-    """Generate physical examination template based on transcript"""
-    text_lower = text.lower()
+    """
+    Generate physical examination template based on transcript and template mapper
+    """
+    analysis = template_mapper.analyze_transcript(text)
+    return analysis['template_text']
+    
+    """
     
     if "abdominal pain" in text_lower or "stomach" in text_lower:
         return ("Physical examination:\n"
@@ -200,5 +247,10 @@ def insert_physical_exam(text):
                 "Abdomen: Soft, non-tender. No rebound or guarding. No CVA tenderness.\n"
                 "Extremities: Cap refill <2 seconds, pulses intact. No pedal edema.")
 
+    """
+
 if __name__ == '__main__':
+    print("=== AI Scribe App Starting ===")
+    print(f"Available templates: {template_mapper.get_available_templates()}")
+    print("Server starting on http://localhost:5000")
     app.run(debug=True)
