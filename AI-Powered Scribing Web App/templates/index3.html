@@ -1,0 +1,155 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Scribe App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #startBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #stopBtn {
+            background-color: #f44336;
+            color: white;
+        }
+        #startBtn:disabled, #stopBtn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .recording {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .ready {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+        }
+        .result-section {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .clinical-report {
+            background-color: #f8f9fa;
+            font-family: 'Times New Roman', serif;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>AI-POWERED Scribing Web App</h1>
+    
+    <div class="controls">
+        <button id="startBtn" onclick="startRecording()">Start Recording</button>
+        <button id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+    </div>
+    
+    <div id="status" class="status ready">Ready to record patient conversation</div>
+    
+    <div class="result-section">
+        <p><strong> Audio Transcription:</strong></p>
+        <div id="transcript">Click "Start Recording" to begin...</div>
+    </div>
+    
+    <div class="result-section">
+        <p><strong>Medical Documentation (HPI & Physical Examination):</strong></p>
+        <div id="clinical-report">Complete documentation will appear here after processing transcription...</div>
+    </div>
+
+    <script>
+        let isRecording = false;
+
+        function startRecording() {
+            if (isRecording) return;
+            
+            isRecording = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').textContent = 'Recording patient conversation... Click "Stop Recording" when done.';
+            document.getElementById('status').className = 'status recording';
+            
+            // Clear previous results
+            document.getElementById('transcript').textContent = 'Recording in progress...';
+            document.getElementById('clinical-report').textContent = 'Waiting for transcription to complete...';
+            
+            // Start recording on server
+            fetch('/start_recording', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        resetButtons();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to start recording');
+                    resetButtons();
+                });
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+            
+            document.getElementById('status').textContent = 'Processing audio...';
+            document.getElementById('transcript').textContent = 'Processing transcription...';
+            document.getElementById('clinical-report').textContent = 'Analyzing transcript and generating documentation...'
+            
+            // Stop recording and get transcription
+            fetch('/stop_recording', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        document.getElementById('status').textContent = 'Error occurred during processing';
+                        document.getElementById('status').className = 'status recording';
+                    } else {
+                        document.getElementById('transcript').textContent = data.transcript;
+                        document.getElementById('clinical-report').textContent = data.summary;
+                        document.getElementById('status').textContent = 'Recording completed successfully!';
+                        document.getElementById('status').className = 'status ready';
+                    }
+                    resetButtons();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to process recording');
+                    resetButtons();
+                });
+        }
+
+        function resetButtons() {
+            isRecording = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            if (document.getElementById('status').textContent.includes('Processing')) {
+                document.getElementById('status').textContent = 'Ready to record patient conversation';
+                document.getElementById('status').className = 'status ready';
+            }
+        }
+    </script>
+</body>
+</html>
