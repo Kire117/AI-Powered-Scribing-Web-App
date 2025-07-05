@@ -1,4 +1,3 @@
-Live page at: https://kire117.github.io/AI-Powered-Scribing-Web-App/
 
 Our app is mainly designed to record the initial doctor/patient assessment and help with History (Hx) and Physical Exam (Px) sections (black text)
 The red text in the Physical Exam (PE) are the parts that are changed/different from the normal negative template
