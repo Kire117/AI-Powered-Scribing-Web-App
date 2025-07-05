@@ -1,22 +1,23 @@
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
+import re
 from dotenv import load_dotenv
 from together import Together
 
-# Load environment variables
+#load env variables
 load_dotenv()
 
 client = Together(api_key=os.environ.get('TOGETHER_API_KEY'))
 
 app = Flask(__name__)
-
 @app.route('/')
 def index():
-    return render_template('index2.html')
+    return render_template('index.html')
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
+
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
     with mic as source:
@@ -26,28 +27,22 @@ def transcribe():
 
     try:
         text = recognizer.recognize_google(audio, language='en-EN')
-        print("Transcript:", text)
+        print("This is what I have: ", text)
 
         summary = summarize_hpi(text)
-        physical_exam = generate_physical_exam(summary)
-
-        return jsonify({
-            "transcript": text,
-            "summary": summary,
-            "physical_exam": physical_exam
-        })
-
+        exam_template = insert_physical_exam(text)
+        return jsonify({"transcript": text, "summary": summary, "template": exam_template})
     except Exception as e:
         return jsonify({"error": str(e)})
 
 def summarize_hpi(transcript):
-    prompt = f"Summarize the following clinical conversation as a history of present illness (HPI):\n{transcript}"
+    prompt = f"Summarize the following clinical conversation as a history of illnes (HPI):\n{transcript}"
     response = client.chat.completions.create(
-        model="Qwen/Qwen3-235B-A22B-fp8-tput",  # You can replace with DeepSeek or another model
+        model="Qwen/Qwen3-235B-A22B-fp8-tput",
         messages=[
             {
                 "role": "system",
-                "content": "You are a physician in an emergency department writing a clinical history of present illness (HPI) in a clear, concise, and professional manner."
+                "content": "You are a physician in an emergency department writing a clinical history of illness (CHI) in a professional, clear, and concise manner."
             },
             {
                 "role": "user",
@@ -56,40 +51,72 @@ def summarize_hpi(transcript):
         ],
         stream=False
     )
-    return response.choices[0].message.content.strip()
+    message = response.choices[0].message
 
-def generate_physical_exam(hpi_summary):
-    # load the physical exam template examples
-    try:
-        with open("ed_exam_templates.txt", "r") as file:
-            template_examples = file.read()
-    except FileNotFoundError:
-        template_examples = "Template file not found. Please check the file path."
+    # This depends on your response structure; adjust if needed
+    if isinstance(message, dict) and "content" in message:
+        raw_output = message["content"].strip()
+    elif isinstance(message, str):
+        raw_output = message.strip()
+    else:
+        raw_output = str(message).strip()
 
-    prompt = f"""
-    You are an emergency physician. Based on the following history of present illness (HPI), write a complete physical exam using the following examples as your reference.
+    cleaned_output = clean_ai_output(raw_output)
+    return cleaned_output
 
-    HPI:
-    {hpi_summary}
+def clean_ai_output(text):
+    """Cleans LLM responses by removing <think> sections and non-clinical commentary."""
+    if not text:
+        return ""
 
-    Use the structure and language from these real ED physical exam templates:
+    # Remove content inside <think>...</think> tags (case insensitive, multiline)
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
 
-    {template_examples}
+    # Remove filler lines starting with common non-clinical phrases (case insensitive)
+    noisy_starts = [
+        r"^based on.*",
+        r"^in summary.*",
+        r"^overall.*",
+        r"^it appears.*",
+        r"^the patient seems.*",
+        r"^as an ai.*",
+        r"^as a language model.*",
+        r"^given the.*",
+        r"^i (would|can|could).*",
+        r"^this suggests.*",
+        r"^i am an ai.*",
+    ]
 
-    Now generate the most appropriate physical exam for this patient.
-    """
+    clean_lines = []
+    for line in text.splitlines():
+        stripped = line.strip().lower()
+        if not any(re.match(pattern, stripped, flags=re.IGNORECASE) for pattern in noisy_starts):
+            clean_lines.append(line)
 
-    response = client.chat.completions.create(
-        model="Qwen/Qwen3-235B-A22B-fp8-tput",  # Use DeepSeek or your preferred Together model
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        stream=False
-    )
-    return response.choices[0].message.content.strip()
+    cleaned_text = "\n".join(clean_lines)
+
+    # Remove standalone AI disclaimers anywhere in the text
+    cleaned_text = re.sub(r"(?i)(i am an ai|as an ai|language model).*", "", cleaned_text)
+
+    # Finally, strip extra whitespace
+    return cleaned_text.strip()
+def insert_physical_exam(text):
+    if "abdominal pain" in text.lower():
+        return "Physical examination: Soft, depressible abdomen, tenderness in the right lower quadrant..."
+    elif "cough" in text.lower():
+        return "Physical examination: Vesicular murmur present, without added sounds..."
+    else:
+        return ("General: Appears well and non-toxic."
+                "\nNeuro: Alert and oriented x3, normal phonation. moving extremities x4."
+                "\nHEENT: Normal, moist oropharynx."
+                "\nCardio: Normal heart sounds without murmur."
+                "\nResp: Lungs clear bilaterally without adventitious sounds."
+                "\nNo accessory muscle use."
+                "\nAbdo: Soft, non-tender. No rebound or guarding. No CVA tenderness."
+                "\nExtremities: Cap refill <2 seconds, pulses intact."
+                "No pedal edema."
+                )
+
 
 if __name__ == '__main__':
     app.run(debug=True)
