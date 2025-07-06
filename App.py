@@ -489,9 +489,12 @@ PHYSICAL EXAMINATION:
 
 NOTE: Physical examination template ({selected_template}) selected automatically based on keyword analysis. Confidence: {template_analysis['confidence']:.3f}"""
 
+# if __name__ == '__main__':
+#     print("=== Enhanced AI Scribe App Starting ===")
+#     print(f"Available templates: {template_mapper.get_available_templates()}")
+#     print("Template integration: ENABLED")
+#     print("Server starting on http://localhost:5000")
+#     app.run(debug=True)
 if __name__ == '__main__':
-    print("=== Enhanced AI Scribe App Starting ===")
-    print(f"Available templates: {template_mapper.get_available_templates()}")
-    print("Template integration: ENABLED")
-    print("Server starting on http://localhost:5000")
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8080))  # Fly.io uses 8080
+    app.run(host='0.0.0.0', port=port)

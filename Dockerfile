@@ -1,17 +1,10 @@
-# Use Python 3.9 base image
 FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy files
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-# Install dependencies
-RUN pip install -r requirements.txt
-
-# Expose port (Flask default: 5000, FastAPI: 8000)
-EXPOSE 5000
-
-# Run the app
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
