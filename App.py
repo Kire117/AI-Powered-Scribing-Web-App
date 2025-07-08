@@ -30,6 +30,10 @@ template_mapper = TemplateMapper()
 def index():
     return render_template('index.html')
 
+@app.route('/')
+def health():
+    return {'status': 'healthy'}
+
 @app.route('/start_recording', methods=['POST'])
 def start_recording():
     global recording_thread, is_recording, recorded_audio, stop_requested
