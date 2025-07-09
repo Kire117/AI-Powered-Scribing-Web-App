@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -39,10 +38,20 @@
         .recording {
             background-color: #ffebee;
             color: #c62828;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
         .ready {
             background-color: #e8f5e8;
             color: #2e7d32;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
         }
         .result-section {
             margin-top: 20px;
@@ -76,79 +85,128 @@
     
     <div class="result-section">
         <p><strong>Medical Documentation (HPI & Physical Examination):</strong></p>
-        <div id="clinical-report">Complete documentation will appear here after processing transcription...</div>
+        <div id="clinical-report" class="clinical-report">Complete documentation will appear here after processing transcription...</div>
     </div>
 
     <script>
         let isRecording = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
 
-        function startRecording() {
+        // Check for HTTPS
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            document.getElementById('httpsWarning').style.display = 'block';
+            document.getElementById('startBtn').disabled = true;
+        }
+
+        async function startRecording() {
             if (isRecording) return;
             
-            isRecording = true;
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            document.getElementById('status').textContent = 'Recording patient conversation... Click "Stop Recording" when done.';
-            document.getElementById('status').className = 'status recording';
-            
-            // Clear previous results
-            document.getElementById('transcript').textContent = 'Recording in progress...';
-            document.getElementById('clinical-report').textContent = 'Waiting for transcription to complete...';
-            
-            // Start recording on server
-            fetch('/start_recording', {method: 'POST'})
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                        resetButtons();
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
                     }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Failed to start recording');
-                    resetButtons();
                 });
+                
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    processRecording();
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('status').textContent = 'Recording patient conversation... Click "Stop Recording" when done.';
+                document.getElementById('status').className = 'status recording';
+                
+                // Clear previous results
+                document.getElementById('transcript').textContent = 'Recording in progress...';
+                document.getElementById('clinical-report').textContent = 'Waiting for transcription to complete...';
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+                document.getElementById('status').className = 'status error';
+                resetButtons();
+            }
         }
 
         function stopRecording() {
-            if (!isRecording) return;
+            if (!isRecording || !mediaRecorder) return;
             
             document.getElementById('status').textContent = 'Processing audio...';
             document.getElementById('transcript').textContent = 'Processing transcription...';
-            document.getElementById('clinical-report').textContent = 'Analyzing transcript and generating documentation...'
+            document.getElementById('clinical-report').textContent = 'Analyzing transcript and generating documentation...';
             
-            // Stop recording and get transcription
-            fetch('/stop_recording', {method: 'POST'})
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                        document.getElementById('status').textContent = 'Error occurred during processing';
-                        document.getElementById('status').className = 'status recording';
-                    } else {
-                        document.getElementById('transcript').textContent = data.transcript;
-                        document.getElementById('clinical-report').textContent = data.summary;
-                        document.getElementById('status').textContent = 'Recording completed successfully!';
-                        document.getElementById('status').className = 'status ready';
-                    }
-                    resetButtons();
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Failed to process recording');
-                    resetButtons();
+            mediaRecorder.stop();
+            isRecording = false;
+            
+            // Stop all tracks
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            
+            resetButtons();
+        }
+
+        async function processRecording() {
+            try {
+                // Create audio blob
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                
+                // Send to backend for processing
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+                
+                document.getElementById('status').textContent = 'Transcribing audio...';
+                
+                const response = await fetch('/process_audio', {
+                    method: 'POST',
+                    body: formData
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                // Display results
+                document.getElementById('transcript').textContent = result.transcript;
+                document.getElementById('clinical-report').textContent = result.summary;
+                document.getElementById('status').textContent = 'Recording completed successfully!';
+                document.getElementById('status').className = 'status ready';
+                
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                document.getElementById('status').textContent = `Error processing audio: ${error.message}`;
+                document.getElementById('status').className = 'status error';
+                document.getElementById('transcript').textContent = 'Error occurred during processing';
+                document.getElementById('clinical-report').textContent = 'Please try recording again';
+            }
         }
 
         function resetButtons() {
             isRecording = false;
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
-            if (document.getElementById('status').textContent.includes('Processing')) {
-                document.getElementById('status').textContent = 'Ready to record patient conversation';
-                document.getElementById('status').className = 'status ready';
-            }
         }
     </script>
 </body>
