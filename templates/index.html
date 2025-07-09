@@ -93,10 +93,10 @@
         let audioChunks = [];
 
         // Check for HTTPS
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            document.getElementById('httpsWarning').style.display = 'block';
-            document.getElementById('startBtn').disabled = true;
-        }
+        // if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        //     document.getElementById('httpsWarning').style.display = 'block';
+        //     document.getElementById('startBtn').disabled = true;
+        // }
 
         async function startRecording() {
             if (isRecording) return;
