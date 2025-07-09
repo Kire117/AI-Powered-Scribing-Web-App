@@ -1,25 +1,48 @@
-# app.py - Updated for client-side audio recording
+# app.py - Updated with better error handling
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
 import re
 import tempfile
+import logging
 from dotenv import load_dotenv
 from together import Together
 
-# import custom template mapper
-from template_mapper import TemplateMapper
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Import custom template mapper
+try:
+    from template_mapper import TemplateMapper
+except ImportError:
+    logger.error("Could not import template_mapper. Make sure the file exists.")
+    # Create a fallback template mapper
+    class TemplateMapper:
+        def analyze_transcript(self, text):
+            return {
+                'best_template': 'general',
+                'confidence': 0.5,
+                'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
+            }
 
 # Load env variables
 load_dotenv()
 
-client = Together()
+# Initialize Together client
+try:
+    client = Together()
+    logger.info("Together client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Together client: {str(e)}")
+    client = None
+
 app = Flask(__name__)
 
 # Configure upload settings
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# initialize the template mapper
+# Initialize the template mapper
 template_mapper = TemplateMapper()
 
 @app.route('/')
@@ -34,49 +57,91 @@ def health():
 def process_audio():
     """Process uploaded audio file and return transcript and summary"""
     
-    if 'audio' not in request.files:
-        return jsonify({"error": "No audio file provided"}), 400
-    
-    audio_file = request.files['audio']
-    
-    if audio_file.filename == '':
-        return jsonify({"error": "No audio file selected"}), 400
+    logger.info("Processing audio request received")
     
     try:
+        # Check if audio file is present
+        if 'audio' not in request.files:
+            logger.error("No audio file provided in request")
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        
+        if audio_file.filename == '':
+            logger.error("No audio file selected")
+            return jsonify({"error": "No audio file selected"}), 400
+        
+        logger.info(f"Audio file received: {audio_file.filename}, size: {audio_file.content_length if hasattr(audio_file, 'content_length') else 'unknown'}")
+        
         # Save the uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
-            audio_file.save(temp_file.name)
-            temp_file_path = temp_file.name
+        temp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+                audio_file.save(temp_file.name)
+                temp_file_path = temp_file.name
+                logger.info(f"Audio file saved to: {temp_file_path}")
+        except Exception as e:
+            logger.error(f"Error saving audio file: {str(e)}")
+            return jsonify({"error": f"Error saving audio file: {str(e)}"}), 500
         
         # Initialize recognizer
         recognizer = sr.Recognizer()
         
         # Process the audio file
-        with sr.AudioFile(temp_file_path) as source:
-            # Adjust for ambient noise
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            
-            # Record the audio
-            audio_data = recognizer.record(source)
+        text = ""
+        try:
+            with sr.AudioFile(temp_file_path) as source:
+                logger.info("Processing audio file with speech recognition")
+                # Adjust for ambient noise
+                recognizer.adjust_for_ambient_noise(source, duration=1)
+                
+                # Record the audio
+                audio_data = recognizer.record(source)
+                logger.info("Audio data recorded successfully")
+        except Exception as e:
+            logger.error(f"Error reading audio file: {str(e)}")
+            if temp_file_path and os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+            return jsonify({"error": f"Error reading audio file: {str(e)}"}), 500
         
         # Clean up temporary file
-        os.unlink(temp_file_path)
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+            logger.info("Temporary file cleaned up")
         
         # Transcribe the audio
         try:
             text = recognizer.recognize_google(audio_data, language='en-US')
-            print("Transcribed text:", text)
+            logger.info(f"Transcribed text: {text[:100]}...")
         except sr.UnknownValueError:
+            logger.error("Could not understand audio")
             return jsonify({"error": "Could not understand audio"}), 400
         except sr.RequestError as e:
+            logger.error(f"Error with speech recognition service: {e}")
             return jsonify({"error": f"Error with speech recognition service: {e}"}), 500
+        except Exception as e:
+            logger.error(f"Unexpected error during transcription: {str(e)}")
+            return jsonify({"error": f"Unexpected error during transcription: {str(e)}"}), 500
         
         # Analyze transcript to determine the correct template
-        template_analysis = template_mapper.analyze_transcript(text)
-        print(f"Template Analysis: {template_analysis}")
+        try:
+            template_analysis = template_mapper.analyze_transcript(text)
+            logger.info(f"Template Analysis: {template_analysis}")
+        except Exception as e:
+            logger.error(f"Error in template analysis: {str(e)}")
+            template_analysis = {
+                'best_template': 'general',
+                'confidence': 0.5,
+                'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
+            }
         
         # Generate summary with the determined template
-        clinical_report = generate_clinical_report(text, template_analysis)
+        try:
+            clinical_report = generate_clinical_report(text, template_analysis)
+            logger.info("Clinical report generated successfully")
+        except Exception as e:
+            logger.error(f"Error generating clinical report: {str(e)}")
+            clinical_report = create_fallback_report(text, template_analysis)
         
         return jsonify({
             "transcript": text, 
@@ -88,8 +153,8 @@ def process_audio():
         })
         
     except Exception as e:
-        print(f"Error processing audio: {str(e)}")
-        return jsonify({"error": f"Error processing audio: {str(e)}"}), 500
+        logger.error(f"Unexpected error in process_audio: {str(e)}")
+        return jsonify({"error": f"Unexpected error processing audio: {str(e)}"}), 500
 
 def clean_ai_response(text):
     """
@@ -220,6 +285,10 @@ def generate_clinical_report(transcript, template_analysis):
     """
     Generate HPI summary using AI with the correct template enforced.
     """
+    if not client:
+        logger.error("Together client not available, using fallback")
+        return create_fallback_report(transcript, template_analysis)
+    
     selected_template = template_analysis['best_template']
     template_text = template_analysis['template_text']
     confidence = template_analysis['confidence']
@@ -284,14 +353,14 @@ def generate_clinical_report(transcript, template_analysis):
             cleaned_output = clean_ai_response(generated_text)
         
         if validate_cleaned_response(cleaned_output):
-            print(f"Successfully cleaned AI response for {selected_template} template")
+            logger.info(f"Successfully cleaned AI response for {selected_template} template")
             return cleaned_output
         else:
-            print(f"Cleaning may be incomplete, using fallback approach")
+            logger.warning(f"Cleaning may be incomplete, using fallback approach")
             return create_fallback_report(transcript, template_analysis)
             
     except Exception as e:
-        print(f"Error generating summary: {str(e)}")
+        logger.error(f"Error generating summary: {str(e)}")
         return create_fallback_report(transcript, template_analysis)
 
 def create_fallback_report(transcript, template_analysis):
