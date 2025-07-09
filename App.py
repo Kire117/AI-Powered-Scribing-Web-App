@@ -1,4 +1,4 @@
-# app.py - Fixed version with proper audio handling and error recovery
+# app.py - Complete version with enhanced audio processing and error recovery
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
@@ -58,7 +58,7 @@ def health():
 
 def validate_audio_file(file_path):
     """
-    Validate that the audio file is readable and not corrupted.
+    Enhanced audio file validation with more detailed checks.
     
     Args:
         file_path (str): Path to the audio file
@@ -68,19 +68,34 @@ def validate_audio_file(file_path):
     """
     try:
         # Check file size
-        if os.path.getsize(file_path) == 0:
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
             logger.error("Audio file is empty (0 bytes)")
             return False
+        
+        if file_size < 1000:  # Less than 1KB is probably too small
+            logger.warning(f"Audio file very small: {file_size} bytes")
         
         # Try to open as WAV file
         with wave.open(file_path, 'rb') as wav_file:
             frames = wav_file.getnframes()
+            frame_rate = wav_file.getframerate()
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            duration = frames / frame_rate if frame_rate > 0 else 0
+            
+            logger.info(f"Audio details: {frames} frames, {duration:.2f}s duration, {frame_rate}Hz sample rate, {channels} channels, {sample_width} bytes sample width")
+            
             if frames == 0:
                 logger.error("Audio file contains no frames")
                 return False
-        
-        logger.info(f"Audio file validation passed: {frames} frames")
-        return True
+            
+            if duration < 0.1:  # Less than 0.1 seconds
+                logger.warning(f"Audio duration very short: {duration:.2f} seconds")
+                return False
+            
+            logger.info(f"Audio validation passed: {frames} frames, {duration:.2f}s duration, {frame_rate}Hz sample rate")
+            return True
         
     except wave.Error as e:
         logger.error(f"WAV file error: {str(e)}")
@@ -114,11 +129,16 @@ def convert_audio_format(input_path, output_path):
             if params.nchannels != 1:
                 frames = audioop.tomono(frames, 2, 1, 0)
             
+            # Use 16kHz sample rate for better speech recognition
+            target_rate = 16000
+            if params.framerate != target_rate:
+                frames = audioop.ratecv(frames, 2, 1, params.framerate, target_rate, None)[0]
+            
             # Write converted audio
             with wave.open(output_path, 'wb') as output_wav:
                 output_wav.setnchannels(1)  # Mono
                 output_wav.setsampwidth(2)  # 16-bit
-                output_wav.setframerate(params.framerate)
+                output_wav.setframerate(target_rate)
                 output_wav.writeframes(frames)
         
         logger.info(f"Audio converted successfully: {input_path} -> {output_path}")
@@ -144,7 +164,7 @@ def create_valid_wav_file(audio_data, output_path):
         with wave.open(output_path, 'wb') as wav_file:
             wav_file.setnchannels(1)  # Mono
             wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(44100)  # Standard sample rate
+            wav_file.setframerate(16000)  # 16kHz sample rate for speech
             wav_file.writeframes(audio_data)
         
         logger.info(f"WAV file created: {output_path}")
@@ -153,6 +173,208 @@ def create_valid_wav_file(audio_data, output_path):
     except Exception as e:
         logger.error(f"Error creating WAV file: {str(e)}")
         return False
+
+def improved_speech_recognition(temp_file_path):
+    """
+    Enhanced speech recognition with multiple attempts and better error handling.
+    
+    Args:
+        temp_file_path (str): Path to the audio file
+        
+    Returns:
+        str: Transcribed text
+        
+    Raises:
+        sr.UnknownValueError: When speech cannot be understood
+        sr.RequestError: When there's a service error
+        Exception: For other errors
+    """
+    recognizer = sr.Recognizer()
+    
+    # Adjust recognizer settings for better performance
+    recognizer.energy_threshold = 200  # Lower threshold for quieter audio
+    recognizer.dynamic_energy_threshold = True
+    recognizer.dynamic_energy_adjustment_damping = 0.15
+    recognizer.dynamic_energy_ratio = 1.5
+    recognizer.pause_threshold = 0.8  # Seconds of non-speaking audio before a phrase is considered complete
+    recognizer.operation_timeout = None  # No timeout for recognition
+    recognizer.phrase_threshold = 0.3  # Minimum length of a phrase
+    recognizer.non_speaking_duration = 0.5  # Seconds of non-speaking audio to keep on both sides
+    
+    try:
+        with sr.AudioFile(temp_file_path) as source:
+            logger.info("Processing audio with improved recognition settings")
+            
+            # Adjust for ambient noise with longer duration
+            recognizer.adjust_for_ambient_noise(source, duration=1.0)
+            
+            # Record the audio
+            audio_data = recognizer.record(source)
+            logger.info("Audio data recorded successfully")
+            
+            # Try multiple recognition attempts with different settings
+            recognition_attempts = [
+                # Attempt 1: Standard Google recognition
+                {
+                    'language': 'en-US',
+                    'show_all': False,
+                    'description': 'Standard US English'
+                },
+                # Attempt 2: Google with show_all=True for confidence scores
+                {
+                    'language': 'en-US',
+                    'show_all': True,
+                    'description': 'US English with confidence scores'
+                },
+                # Attempt 3: Try with different language hint
+                {
+                    'language': 'en',
+                    'show_all': False,
+                    'description': 'Generic English'
+                },
+                # Attempt 4: Try with Canadian English
+                {
+                    'language': 'en-CA',
+                    'show_all': False,
+                    'description': 'Canadian English'
+                }
+            ]
+            
+            for i, attempt in enumerate(recognition_attempts, 1):
+                try:
+                    logger.info(f"Recognition attempt {i}: {attempt['description']}")
+                    
+                    result = recognizer.recognize_google(
+                        audio_data, 
+                        language=attempt['language'],
+                        show_all=attempt['show_all']
+                    )
+                    
+                    # Handle different result formats
+                    if attempt['show_all'] and isinstance(result, dict):
+                        if 'alternative' in result and result['alternative']:
+                            text = result['alternative'][0]['transcript']
+                            confidence = result['alternative'][0].get('confidence', 0)
+                            logger.info(f"Recognition successful with confidence: {confidence}")
+                        else:
+                            logger.warning(f"Attempt {i}: No alternatives found")
+                            continue
+                    else:
+                        text = result
+                        logger.info(f"Recognition successful: {text[:100]}...")
+                    
+                    # Validate result
+                    if text and len(text.strip()) >= 3:
+                        logger.info(f"Final transcription: {text}")
+                        return text.strip()
+                    else:
+                        logger.warning(f"Attempt {i}: Text too short or empty: '{text}'")
+                        continue
+                        
+                except sr.UnknownValueError:
+                    logger.warning(f"Attempt {i}: Could not understand audio")
+                    continue
+                except sr.RequestError as e:
+                    logger.error(f"Attempt {i}: Recognition service error: {e}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Attempt {i}: Unexpected error: {e}")
+                    continue
+            
+            # If all attempts failed
+            raise sr.UnknownValueError("Could not understand audio after multiple attempts")
+            
+    except Exception as e:
+        logger.error(f"Error in speech recognition: {str(e)}")
+        raise
+
+def process_audio_with_fallback(audio_file_path):
+    """
+    Process audio with multiple fallback strategies.
+    
+    Args:
+        audio_file_path (str): Path to the original audio file
+        
+    Returns:
+        tuple: (success: bool, transcript: str, error_message: str)
+    """
+    
+    # Strategy 1: Try with original file
+    logger.info("Strategy 1: Processing original audio file")
+    try:
+        transcript = improved_speech_recognition(audio_file_path)
+        return True, transcript, None
+    except sr.UnknownValueError as e:
+        logger.warning(f"Strategy 1 failed: {str(e)}")
+    except sr.RequestError as e:
+        logger.error(f"Strategy 1 service error: {str(e)}")
+        return False, "", f"Speech recognition service error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Strategy 1 unexpected error: {str(e)}")
+    
+    # Strategy 2: Try with converted audio
+    logger.info("Strategy 2: Converting audio format and retrying")
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_file:
+            converted_path = converted_file.name
+        
+        if convert_audio_format(audio_file_path, converted_path):
+            if validate_audio_file(converted_path):
+                try:
+                    transcript = improved_speech_recognition(converted_path)
+                    return True, transcript, None
+                except sr.UnknownValueError as e:
+                    logger.warning(f"Strategy 2 failed: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Strategy 2 error: {str(e)}")
+        
+        # Clean up converted file
+        try:
+            os.unlink(converted_path)
+        except:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Audio conversion failed: {str(e)}")
+    
+    # Strategy 3: Try with basic audio recreation
+    logger.info("Strategy 3: Recreating audio file")
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as recreated_file:
+            recreated_path = recreated_file.name
+        
+        # Read raw audio data and recreate WAV file
+        with open(audio_file_path, 'rb') as f:
+            raw_data = f.read()
+        
+        # Skip WAV header if present and use raw audio data
+        if raw_data.startswith(b'RIFF'):
+            # Find the data chunk
+            data_start = raw_data.find(b'data') + 8
+            if data_start > 8:
+                raw_data = raw_data[data_start:]
+        
+        if create_valid_wav_file(raw_data, recreated_path):
+            if validate_audio_file(recreated_path):
+                try:
+                    transcript = improved_speech_recognition(recreated_path)
+                    return True, transcript, None
+                except sr.UnknownValueError as e:
+                    logger.warning(f"Strategy 3 failed: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Strategy 3 error: {str(e)}")
+        
+        # Clean up recreated file
+        try:
+            os.unlink(recreated_path)
+        except:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Audio recreation failed: {str(e)}")
+    
+    # All strategies failed
+    return False, "", "Could not understand audio. Please ensure the recording contains clear speech, minimal background noise, and sufficient volume."
 
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
@@ -184,9 +406,13 @@ def process_audio():
             logger.error("Received empty audio file")
             return jsonify({"error": "Audio file is empty. Please record some audio first."}), 400
         
+        # Check file size limits
+        if file_size > app.config['MAX_CONTENT_LENGTH']:
+            logger.error(f"File too large: {file_size} bytes")
+            return jsonify({"error": "Audio file too large. Please record a shorter message."}), 400
+        
         # Save the uploaded file temporarily
         temp_file_path = None
-        converted_file_path = None
         
         try:
             # Save original file
@@ -195,84 +421,54 @@ def process_audio():
                 temp_file_path = temp_file.name
                 logger.info(f"Audio file saved to: {temp_file_path}")
             
+            # Log audio file details
+            logger.info(f"Audio file size: {os.path.getsize(temp_file_path)} bytes")
+            
+            # Try to get audio details for debugging
+            try:
+                with wave.open(temp_file_path, 'rb') as wav:
+                    logger.info(f"Audio format - Sample rate: {wav.getframerate()}, Channels: {wav.getnchannels()}, Duration: {wav.getnframes()/wav.getframerate():.2f}s")
+            except Exception as e:
+                logger.warning(f"Could not read audio details: {str(e)}")
+            
             # Validate the audio file
             if not validate_audio_file(temp_file_path):
-                logger.warning("Audio file validation failed, attempting to fix...")
-                
-                # Try to read raw audio data and create a proper WAV file
-                with open(temp_file_path, 'rb') as f:
-                    raw_data = f.read()
-                
-                # Create a new temporary file for converted audio
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_file:
-                    converted_file_path = converted_file.name
-                
-                # Try to create a valid WAV file
-                if not create_valid_wav_file(raw_data, converted_file_path):
-                    return jsonify({"error": "Could not process audio file. Please ensure it's a valid audio recording."}), 400
-                
-                # Use the converted file
-                temp_file_path = converted_file_path
-                
-                # Validate again
-                if not validate_audio_file(temp_file_path):
-                    return jsonify({"error": "Audio file appears to be corrupted or in an unsupported format."}), 400
+                logger.warning("Audio file validation failed, will attempt processing anyway")
             
         except Exception as e:
             logger.error(f"Error saving/processing audio file: {str(e)}")
             return jsonify({"error": f"Error processing audio file: {str(e)}"}), 500
         
-        # Initialize recognizer
-        recognizer = sr.Recognizer()
-        
-        # Process the audio file
-        text = ""
+        # Process the audio file with enhanced recognition
         try:
-            with sr.AudioFile(temp_file_path) as source:
-                logger.info("Processing audio file with speech recognition")
-                # Adjust for ambient noise
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                
-                # Record the audio
-                audio_data = recognizer.record(source)
-                logger.info("Audio data recorded successfully")
-                
-        except Exception as e:
-            logger.error(f"Error reading audio file: {str(e)}")
-            return jsonify({"error": f"Error reading audio file: {str(e)}"}), 500
-        
-        finally:
-            # Clean up temporary files
-            for file_path in [temp_file_path, converted_file_path]:
-                if file_path and os.path.exists(file_path):
-                    try:
-                        os.unlink(file_path)
-                        logger.info(f"Temporary file cleaned up: {file_path}")
-                    except:
-                        pass
-        
-        # Transcribe the audio
-        try:
-            text = recognizer.recognize_google(audio_data, language='en-US')
-            logger.info(f"Transcribed text: {text[:100]}...")
+            success, transcript, error_message = process_audio_with_fallback(temp_file_path)
+            
+            if not success:
+                logger.error(f"Speech recognition failed: {error_message}")
+                return jsonify({"error": error_message}), 400
+            
+            logger.info(f"Transcribed text: {transcript[:100]}...")
             
             # Check if transcription is too short
-            if len(text.strip()) < 5:
+            if len(transcript.strip()) < 5:
                 return jsonify({"error": "Transcription too short. Please speak more clearly or record longer audio."}), 400
             
-        except sr.UnknownValueError:
-            logger.error("Could not understand audio")
-            return jsonify({"error": "Could not understand audio. Please speak more clearly and try again."}), 400
-        except sr.RequestError as e:
-            logger.error(f"Error with speech recognition service: {e}")
-            return jsonify({"error": f"Speech recognition service error: {e}"}), 500
         except Exception as e:
             logger.error(f"Unexpected error during transcription: {str(e)}")
             return jsonify({"error": f"Unexpected error during transcription: {str(e)}"}), 500
         
+        finally:
+            # Clean up temporary file
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                    logger.info(f"Temporary file cleaned up: {temp_file_path}")
+                except:
+                    pass
+        
         # Analyze transcript to determine the correct template
         try:
-            template_analysis = template_mapper.analyze_transcript(text)
+            template_analysis = template_mapper.analyze_transcript(transcript)
             logger.info(f"Template Analysis: {template_analysis}")
         except Exception as e:
             logger.error(f"Error in template analysis: {str(e)}")
@@ -284,14 +480,14 @@ def process_audio():
         
         # Generate summary with the determined template
         try:
-            clinical_report = generate_clinical_report(text, template_analysis)
+            clinical_report = generate_clinical_report(transcript, template_analysis)
             logger.info("Clinical report generated successfully")
         except Exception as e:
             logger.error(f"Error generating clinical report: {str(e)}")
-            clinical_report = create_fallback_report(text, template_analysis)
+            clinical_report = create_fallback_report(transcript, template_analysis)
         
         return jsonify({
-            "transcript": text, 
+            "transcript": transcript, 
             "summary": clinical_report, 
             "template_info": {
                 "selected_template": template_analysis['best_template'],
