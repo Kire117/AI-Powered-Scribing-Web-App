@@ -152,12 +152,19 @@
             document.getElementById('transcript').textContent = 'Processing transcription...';
             document.getElementById('clinical-report').textContent = 'Analyzing transcript and generating documentation...';
             
-            mediaRecorder.stop();
             isRecording = false;
-            
-            // Stop all tracks
-            mediaRecorder.stream.getTracks().forEach(track => track.stop());
-            
+
+            //Let the `onstop` handle processing and cleanup
+            mediaRecorder.onstop = () => {
+                processRecording();
+
+                // Now it’s safe to stop the stream
+                if (mediaRecorder.stream) {
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                }
+            };
+
+            mediaRecorder.stop();  // flushes final chunk
             resetButtons();
         }
 
