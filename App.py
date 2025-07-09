@@ -1,147 +1,91 @@
-# app.py - Updated with better error handling
+# app.py - Enhanced version with proper template integration
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
 import re
-import tempfile
-import logging
+import threading
 from dotenv import load_dotenv
 from together import Together
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Import custom template mapper
-try:
-    from template_mapper import TemplateMapper
-except ImportError:
-    logger.error("Could not import template_mapper. Make sure the file exists.")
-    # Create a fallback template mapper
-    class TemplateMapper:
-        def analyze_transcript(self, text):
-            return {
-                'best_template': 'general',
-                'confidence': 0.5,
-                'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
-            }
+# import custom template mapper
+from template_mapper import TemplateMapper
 
 # Load env variables
 load_dotenv()
 
-# Initialize Together client
-try:
-    client = Together()
-    logger.info("Together client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Together client: {str(e)}")
-    client = None
+# client = Together(api_key=os.environ.get('TOGETHER_API_KEY'))
+client = Together()
 
 app = Flask(__name__)
 
-# Configure upload settings
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+# Global variables for recording state
+recording_thread = None
+is_recording = False
+recorded_audio = None
+recognizer = sr.Recognizer()
 
-# Initialize the template mapper
+# initialize the template mapper
 template_mapper = TemplateMapper()
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/health')
+@app.route('/')
 def health():
     return {'status': 'healthy'}
 
-@app.route('/process_audio', methods=['POST'])
-def process_audio():
-    """Process uploaded audio file and return transcript and summary"""
+@app.route('/start_recording', methods=['POST'])
+def start_recording():
+    global recording_thread, is_recording, recorded_audio, stop_requested
     
-    logger.info("Processing audio request received")
+    if is_recording:
+        return jsonify({"error": "Already recording"})
     
     try:
-        # Check if audio file is present
-        if 'audio' not in request.files:
-            logger.error("No audio file provided in request")
-            return jsonify({"error": "No audio file provided"}), 400
+        is_recording = True
+        stop_requested = False
+        recorded_audio = None
         
-        audio_file = request.files['audio']
+        # Start recording in a separate thread
+        recording_thread = threading.Thread(target=record_audio)
+        recording_thread.start()
         
-        if audio_file.filename == '':
-            logger.error("No audio file selected")
-            return jsonify({"error": "No audio file selected"}), 400
-        
-        logger.info(f"Audio file received: {audio_file.filename}, size: {audio_file.content_length if hasattr(audio_file, 'content_length') else 'unknown'}")
-        
-        # Save the uploaded file temporarily
-        temp_file_path = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
-                audio_file.save(temp_file.name)
-                temp_file_path = temp_file.name
-                logger.info(f"Audio file saved to: {temp_file_path}")
-        except Exception as e:
-            logger.error(f"Error saving audio file: {str(e)}")
-            return jsonify({"error": f"Error saving audio file: {str(e)}"}), 500
-        
-        # Initialize recognizer
-        recognizer = sr.Recognizer()
-        
-        # Process the audio file
-        text = ""
-        try:
-            with sr.AudioFile(temp_file_path) as source:
-                logger.info("Processing audio file with speech recognition")
-                # Adjust for ambient noise
-                recognizer.adjust_for_ambient_noise(source, duration=1)
-                
-                # Record the audio
-                audio_data = recognizer.record(source)
-                logger.info("Audio data recorded successfully")
-        except Exception as e:
-            logger.error(f"Error reading audio file: {str(e)}")
-            if temp_file_path and os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-            return jsonify({"error": f"Error reading audio file: {str(e)}"}), 500
-        
-        # Clean up temporary file
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
-            logger.info("Temporary file cleaned up")
-        
+        return jsonify({"message": "Recording started"})
+    
+    except Exception as e:
+        is_recording = False
+        return jsonify({"error": str(e)})
+
+@app.route('/stop_recording', methods=['POST'])
+def stop_recording():
+    global is_recording, stop_requested, recorded_audio, recording_thread
+    
+    if not is_recording:
+        return jsonify({"error": "Not currently recording"})
+    
+    # Stop recording
+    stop_requested = True
+    
+    # Wait for recording thread to finish
+    if recording_thread:
+        recording_thread.join(timeout=5)  # Wait up to 5 seconds
+    
+    # Process the recorded audio
+    if recorded_audio is None:
+        return jsonify({"error": "No audio was recorded"})
+    
+    try:
         # Transcribe the audio
-        try:
-            text = recognizer.recognize_google(audio_data, language='en-US')
-            logger.info(f"Transcribed text: {text[:100]}...")
-        except sr.UnknownValueError:
-            logger.error("Could not understand audio")
-            return jsonify({"error": "Could not understand audio"}), 400
-        except sr.RequestError as e:
-            logger.error(f"Error with speech recognition service: {e}")
-            return jsonify({"error": f"Error with speech recognition service: {e}"}), 500
-        except Exception as e:
-            logger.error(f"Unexpected error during transcription: {str(e)}")
-            return jsonify({"error": f"Unexpected error during transcription: {str(e)}"}), 500
+        text = recognizer.recognize_google(recorded_audio, language='en-US')
+        print("Transcribed text:", text)
         
-        # Analyze transcript to determine the correct template
-        try:
-            template_analysis = template_mapper.analyze_transcript(text)
-            logger.info(f"Template Analysis: {template_analysis}")
-        except Exception as e:
-            logger.error(f"Error in template analysis: {str(e)}")
-            template_analysis = {
-                'best_template': 'general',
-                'confidence': 0.5,
-                'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
-            }
+        # First, analyze transcript to determine the correct template
+        template_analysis = template_mapper.analyze_transcript(text)
+        print(f"Template Analysis: {template_analysis}")
         
         # Generate summary with the determined template
-        try:
-            clinical_report = generate_clinical_report(text, template_analysis)
-            logger.info("Clinical report generated successfully")
-        except Exception as e:
-            logger.error(f"Error generating clinical report: {str(e)}")
-            clinical_report = create_fallback_report(text, template_analysis)
+        clinical_report = generate_clinical_report(text, template_analysis)
         
         return jsonify({
             "transcript": text, 
@@ -151,15 +95,83 @@ def process_audio():
                 "confidence": template_analysis['confidence']
             }
         })
-        
+    
+    except sr.UnknownValueError:
+        return jsonify({"error": "Could not understand audio"})
+    except sr.RequestError as e:
+        return jsonify({"error": f"Error with speech recognition service: {e}"})
     except Exception as e:
-        logger.error(f"Unexpected error in process_audio: {str(e)}")
-        return jsonify({"error": f"Unexpected error processing audio: {str(e)}"}), 500
+        return jsonify({"error": str(e)})
+
+def record_audio():
+    """Function to record audio continuously until stopped"""
+    global is_recording, recorded_audio, recognizer, stop_requested
+    
+    try:
+        mic = sr.Microphone()
+        
+        with mic as source:
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            print("Recording started...")
+        
+        # Record continuously
+        audio_data = []
+        
+        with mic as source:
+            while is_recording and not stop_requested:
+                try:
+                    # Record in short chunks
+                    chunk = recognizer.listen(source, timeout=1, phrase_time_limit=1)
+                    audio_data.append(chunk.get_wav_data())
+                except sr.WaitTimeoutError:
+                    # No audio in this chunk, continue
+                    continue
+        
+        # Combine all audio chunks
+        if stop_requested and audio_data:
+            # Combine WAV data
+            combined_wav = combine_wav_data(audio_data)
+            recorded_audio = sr.AudioData(combined_wav, mic.SAMPLE_RATE, mic.SAMPLE_WIDTH)
+            print("Recording stopped and saved")
+        else:
+            print("No audio data recorded")
+            recorded_audio = None
+            
+        is_recording = False
+            
+    except Exception as e:
+        print(f"Error during recording: {e}")
+        is_recording = False
+
+def combine_wav_data(wav_data_list):
+    """Combine multiple WAV data chunks into a single WAV"""
+    if not wav_data_list:
+        return b''
+    
+    # For simplicity, just concatenate the WAV data
+    # This is a basic approach - in production you might want more sophisticated audio processing
+    combined = b''
+    for i, wav_data in enumerate(wav_data_list):
+        if i == 0:
+            # Keep the full WAV header from the first chunk
+            combined += wav_data
+        else:
+            # Skip the header (first 44 bytes) for subsequent chunks
+            combined += wav_data[44:]
+    
+    return combined
 
 def clean_ai_response(text):
     """
     Cleans LLM responses by removing <think> sections and non-clinical commentary.
+
+    Args:
+        text (str): Raw AI response
+        
+    Returns:
+        str: Cleaned clinical report
     """
+    
     # Remove <think> tags and their content (case insensitive, multiline)
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
     
@@ -234,7 +246,14 @@ def clean_ai_response(text):
 def advanced_clean_ai_response(text):
     """
     More aggressive cleaning function that uses multiple strategies.
+    
+    Args:
+        text (str): Raw AI response
+        
+    Returns:
+        str: Cleaned clinical report
     """
+    
     # First, try to extract only the clinical sections
     clinical_sections = []
     
@@ -266,6 +285,12 @@ def advanced_clean_ai_response(text):
 def validate_cleaned_response(cleaned_text):
     """
     Validate that the cleaned response contains the expected clinical sections.
+    
+    Args:
+        cleaned_text (str): Cleaned response text
+        
+    Returns:
+        bool: True if response contains required sections
     """
     required_sections = ['HISTORY OF PRESENT ILLNESS', 'PHYSICAL EXAMINATION']
     
@@ -281,14 +306,18 @@ def validate_cleaned_response(cleaned_text):
     
     return True
 
+
 def generate_clinical_report(transcript, template_analysis):
     """
     Generate HPI summary using AI with the correct template enforced.
-    """
-    if not client:
-        logger.error("Together client not available, using fallback")
-        return create_fallback_report(transcript, template_analysis)
     
+    Args:
+        transcript (str): The patient conversation transcript
+        template_analysis (dict): Analysis results from template mapper
+        
+    Returns:
+        str: Generated HPI summary with appropriate examination template
+    """
     selected_template = template_analysis['best_template']
     template_text = template_analysis['template_text']
     confidence = template_analysis['confidence']
@@ -347,25 +376,110 @@ def generate_clinical_report(transcript, template_analysis):
         )
         
         generated_text = response.choices[0].message.content.strip()
+
         cleaned_output = advanced_clean_ai_response(generated_text)
 
         if not validate_cleaned_response(cleaned_output):
             cleaned_output = clean_ai_response(generated_text)
         
         if validate_cleaned_response(cleaned_output):
-            logger.info(f"Successfully cleaned AI response for {selected_template} template")
+            print(f"✓ Successfully cleaned AI response for {selected_template} template")
             return cleaned_output
         else:
-            logger.warning(f"Cleaning may be incomplete, using fallback approach")
+            print(f"⚠ Cleaning may be incomplete, using fallback approach")
             return create_fallback_report(transcript, template_analysis)
             
     except Exception as e:
-        logger.error(f"Error generating summary: {str(e)}")
+        print(f"Error generating summary: {str(e)}")
+        # Fallback: create a basic summary with the template
         return create_fallback_report(transcript, template_analysis)
+    
+
+def validate_template_usage(generated_text, expected_template):
+    """
+    Validate that the AI used the correct template in its response.
+    
+    Args:
+        generated_text (str): The AI-generated response
+        expected_template (str): The template that should have been used
+        template_name (str): Name of the template
+        
+    Returns:
+        bool: True if template was used correctly
+    """
+    # Check if key phrases from the template appear in the generated text
+    template_lines = expected_template.strip().split('\n')
+    key_phrases = []
+    
+    for line in template_lines:
+        line = line.strip()
+        if line and not line.startswith('#') and ':' in line:
+            key_phrases.append(line.split(':')[0].strip())
+    
+    # Check if at least 70% of key phrases are present
+    found_phrases = sum(1 for phrase in key_phrases if phrase.lower() in generated_text.lower())
+    
+    if len(key_phrases) == 0:
+        return True 
+    
+    usage_percentage = found_phrases / len(key_phrases)
+    print(f"Template usage validation: {found_phrases}/{len(key_phrases)} phrases found ({usage_percentage:.2%})")
+    
+    return usage_percentage >= 0.7
+
+def enforce_template_usage(transcript, template_analysis, generated_text):
+    """
+    Enforce correct template usage by reconstructing the response.
+    
+    Args:
+        transcript (str): Original transcript
+        template_analysis (dict): Template analysis results
+        generated_text (str): AI-generated text that may not follow template
+        
+    Returns:
+        str: Corrected response with proper template usage
+    """
+
+    generated_text = clean_ai_response(generated_text)
+    # Extract HPI from generated text if possible
+    hpi_section = ""
+    if "HISTORY OF PRESENT ILLNESS:" in generated_text:
+        try:
+            hpi_start = generated_text.index("HISTORY OF PRESENT ILLNESS:") + len("HISTORY OF PRESENT ILLNESS:")
+            if "PHYSICAL EXAMINATION:" in generated_text:
+                hpi_end = generated_text.index("PHYSICAL EXAMINATION:")
+                hpi_section = generated_text[hpi_start:hpi_end].strip()
+            else:
+                hpi_section = generated_text[hpi_start:].strip()
+        except:
+            pass
+    
+    # If no HPI extracted, create a basic one
+    if not hpi_section:
+        hpi_section = f"Patient presents with chief complaint as described in the clinical interview. {transcript[:200]}..."
+    
+    # Combine with the correct template
+    template_text = template_analysis['template_text']
+    selected_template = template_analysis['best_template']
+    
+    return f"""HISTORY OF PRESENT ILLNESS:
+{hpi_section}
+
+PHYSICAL EXAMINATION:
+{template_text}
+
+NOTE: Physical examination template ({selected_template}) was automatically selected based on clinical presentation analysis."""
 
 def create_fallback_report(transcript, template_analysis):
     """
     Create a basic fallback summary when AI generation fails.
+    
+    Args:
+        transcript (str): Original transcript
+        template_analysis (dict): Template analysis results
+        
+    Returns:
+        str: Basic fallback summary
     """
     template_text = template_analysis['template_text']
     selected_template = template_analysis['best_template']
@@ -380,6 +494,12 @@ PHYSICAL EXAMINATION:
 
 NOTE: Physical examination template ({selected_template}) selected automatically based on keyword analysis. Confidence: {template_analysis['confidence']:.3f}"""
 
+# if __name__ == '__main__':
+#     print("=== Enhanced AI Scribe App Starting ===")
+#     print(f"Available templates: {template_mapper.get_available_templates()}")
+#     print("Template integration: ENABLED")
+#     print("Server starting on http://localhost:5000")
+#     app.run(debug=True)
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)  # Set debug=False for production
+    port = int(os.environ.get("PORT", 8080))  # Fly.io uses 8080
+    app.run(host='0.0.0.0', port=port)
