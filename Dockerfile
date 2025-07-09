@@ -1,21 +1,26 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
+# Install system dependencies for PyAudio, SpeechRecognition, and pydub
 RUN apt-get update && apt-get install -y \
+    gcc \
     portaudio19-dev \
-    python3-pyaudio \
+    libasound-dev \
+    libav-tools \
     ffmpeg \
-    flac \
     && rm -rf /var/lib/apt/lists/*
 
+# Set the working directory
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# Copy everything into the container
 COPY . .
 
-RUN mkdir -p templates
+# Install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Expose port for Fly
 EXPOSE 8080
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "120", "App:app"]
+# Run the app with gunicorn (for production)
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "App:app"]
