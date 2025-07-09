@@ -1,21 +1,22 @@
-FROM python:3.11-slim
+# Use a base image with Python
+FROM python:3.10-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    build-essential \
-    portaudio19-dev \
-    libasound-dev \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and other dependencies
+RUN apt-get update && apt-get install -y ffmpeg build-essential && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
+# Copy your code
 COPY . .
 
-RUN pip install --upgrade pip
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Expose the port
 EXPOSE 8080
 
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "App:app"]
+# Run the app
+CMD ["python", "App.py"]
+

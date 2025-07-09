@@ -10,6 +10,8 @@ from together import Together
 import wave
 import audioop
 import io
+import subprocess
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -288,6 +290,18 @@ def improved_speech_recognition(temp_file_path):
         logger.error(f"Error in speech recognition: {str(e)}")
         raise
 
+def convert_to_wav_ffmpeg(input_path, output_path):
+    try:
+        subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-ar', '16000', '-ac', '1', '-f', 'wav', output_path
+        ], check=True)
+        logger.info("ffmpeg conversion successful")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffmpeg conversion failed: {e}")
+        return False
+
 def process_audio_with_fallback(audio_file_path):
     """
     Process audio with multiple fallback strategies.
@@ -312,13 +326,13 @@ def process_audio_with_fallback(audio_file_path):
     except Exception as e:
         logger.error(f"Strategy 1 unexpected error: {str(e)}")
     
-    # Strategy 2: Try with converted audio
-    logger.info("Strategy 2: Converting audio format and retrying")
+    # Strategy 2: Try ffmpeg conversion
+    logger.info("Strategy 2: Converting audio format using ffmpeg and retrying")
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as converted_file:
             converted_path = converted_file.name
-        
-        if convert_audio_format(audio_file_path, converted_path):
+
+        if convert_to_wav_ffmpeg(audio_file_path, converted_path):
             if validate_audio_file(converted_path):
                 try:
                     transcript = improved_speech_recognition(converted_path)
@@ -327,15 +341,15 @@ def process_audio_with_fallback(audio_file_path):
                     logger.warning(f"Strategy 2 failed: {str(e)}")
                 except Exception as e:
                     logger.error(f"Strategy 2 error: {str(e)}")
-        
+
         # Clean up converted file
         try:
             os.unlink(converted_path)
         except:
             pass
-        
+
     except Exception as e:
-        logger.error(f"Audio conversion failed: {str(e)}")
+        logger.error(f"ffmpeg conversion failed: {str(e)}")
     
     # Strategy 3: Try with basic audio recreation
     logger.info("Strategy 3: Recreating audio file")
