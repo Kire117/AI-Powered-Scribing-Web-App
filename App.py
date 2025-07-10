@@ -555,9 +555,9 @@ def clean_ai_response(text):
 
 def generate_clinical_report(transcript, template_analysis):
     """Generate HPI summary using AI with the correct template enforced."""
-    if not client:
-        logger.error("Together client not available, using fallback")
-        return create_fallback_report(transcript, template_analysis)
+    # if not client:
+    #     logger.error("Together client not available, using fallback")
+    #     return create_fallback_report(transcript, template_analysis)
     
     selected_template = template_analysis['best_template']
     template_text = template_analysis['template_text']
