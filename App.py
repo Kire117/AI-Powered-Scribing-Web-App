@@ -593,7 +593,7 @@ def generate_clinical_report(transcript, template_analysis):
        HISTORY OF PRESENT ILLNESS:
        [Your HPI summary here]
        
-       PHYSICAL EXAMINATION:
+       PHYSICAL EXAMINATION: {selected_template.upper()}
        [Use the exact template provided above]
     
     CRITICAL: Provide ONLY the clinical report. Do not include any thinking process, analysis, explanatory text, or commentary. Start directly with "HISTORY OF PRESENT ILLNESS:" and end with the physical examination. No additional text before or after.

@@ -28,7 +28,7 @@ class TemplateMapper:
                 'motorcycle', 'bicycle', 'pedestrian', 'assault', 'fight', 'attack', 'stabbed'
             ],
             
-            'Neuro': [
+            'Neurological': [
                 'headache', 'migraine', 'dizziness', 'dizzy', 'vertigo', 'seizure',
                 'confusion', 'memory loss', 'stroke', 'numbness', 'tingling',
                 'weakness', 'paralysis', 'vision problems', 'double vision',
@@ -66,7 +66,7 @@ class TemplateMapper:
                 'dysuria', 'frequency', 'urgency'
             ],
             
-            'MSK': [
+            'Musculoskeletal': [
                 'joint pain', 'muscle pain', 'shoulder pain', 'arm pain',
                 'wrist pain', 'hand pain', 'knee pain', 'ankle pain',
                 'foot pain', 'hip pain', 'arthritis', 'swelling',
@@ -85,13 +85,18 @@ class TemplateMapper:
                 'sudden vision loss', 'blind spot'
             ],
             
-            'MSE': [
+            'Mental status exam': [
                 'anxiety', 'depression', 'panic', 'suicidal', 'mental health',
                 'psychiatric', 'hallucinations', 'voices', 'paranoid',
                 'manic', 'bipolar', 'mood', 'emotional', 'psychological',
                 'stress', 'worried', 'sad', 'angry', 'agitated',
                 'panic attack', 'social anxiety', 'PTSD', 'trauma',
                 'substance abuse', 'addiction', 'withdrawal'
+            ],
+            'Pediatrics': [
+                'child', 'baby', 'infant', 'pediatric', 'toddler', 'teenager',
+                'school-age', 'high fever', 'rash on child', 'child not eating',
+                'dehydrated', 'diaper rash', 'sick kid', 'baby vomiting'
             ]
         }
     
@@ -228,7 +233,22 @@ Lt upper ext: No sign of injury. Range of motion, neurovascular status intact.\n
 Rt lower ext: No sign of injury. Range of motion, neurovascular status intact.\n
 Lt lower ext: No sign of injury. Range of motion, neurovascular status intact.\n
 GU and Rectal: Not assessed.\n
-E-FAST: Not assessed."""
+E-FAST: Not assessed.""",
+
+            'Pediatrics': """Pediatrics\n
+            General: Appears well. Normal skin turgor. No jaundice.\n
+Normal cap refill in extremities.\n
+Neuro: Alert, moving all extremities, good tone and reflexes x4, pupils are equal, round, and reactive to light and accommodation.\n
+HEENT: No ocular injection or exudate.\n
+Normal, moist oropharynx. No cracked lips or strawberry tongue.\n
+No tonsillar swelling or exudate.\n
+Normal tympanic membranes bilaterally.\n
+No cervical lymphadenopathy.\n
+Neck supple without cervical spine tenderness.\n
+Cardio: Normal heart sounds without murmur.\n
+Resp: Lungs clear bilaterally without adventitious sounds.\n
+Abdo: Soft, non-tender.\n
+Extremities: No edema bilaterally. No rash, dactylitis or desquamation."""
         }
     
     def calculate_match_score(self, text: str, keywords: List[str]) -> float:
