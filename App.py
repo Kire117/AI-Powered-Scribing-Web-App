@@ -47,7 +47,7 @@ load_dotenv()
 #     logger.error(f"Failed to initialize Together client: {str(e)}")
 #     client = None
 
-client = Together()
+client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))
 
 app = Flask(__name__)
 
