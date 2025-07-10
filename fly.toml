@@ -1,4 +1,4 @@
-app = "your-app-name"
+app = "ai-powered-scribing-app"
 primary_region = "yyz"
 
 [build]
