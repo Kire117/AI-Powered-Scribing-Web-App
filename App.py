@@ -8,7 +8,7 @@ import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
-import together 
+from together import Together
 import wave
 import audioop
 import io
@@ -47,7 +47,7 @@ load_dotenv()
 #     logger.error(f"Failed to initialize Together client: {str(e)}")
 #     client = None
 
-together.api_key = os.getenv("TOGETHER_API_KEY")
+client = Together()
 
 app = Flask(__name__)
 
@@ -600,7 +600,7 @@ def generate_clinical_report(transcript, template_analysis):
     """
 
     try:
-        response = together.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="Qwen/Qwen3-235B-A22B-fp8-tput",  
             messages=[
                 {
