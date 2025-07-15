@@ -39,14 +39,6 @@ except ImportError:
 # Load env variables
 load_dotenv()
 
-# Initialize Together client
-# try:
-#     client = Together()
-#     logger.info("Together client initialized successfully")
-# except Exception as e:
-#     logger.error(f"Failed to initialize Together client: {str(e)}")
-#     client = None
-
 client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))
 
 app = Flask(__name__)
@@ -71,13 +63,6 @@ def health():
 def split_audio_into_chunks(audio_file_path, chunk_duration_seconds=30):
     """
     Split audio file into smaller chunks for processing.
-    
-    Args:
-        audio_file_path (str): Path to the audio file
-        chunk_duration_seconds (int): Duration of each chunk in seconds
-        
-    Returns:
-        list: List of chunk file paths
     """
     try:
         with wave.open(audio_file_path, 'rb') as wav_file:
@@ -122,13 +107,6 @@ def split_audio_into_chunks(audio_file_path, chunk_duration_seconds=30):
 def process_audio_chunk(chunk_path, chunk_index):
     """
     Process a single audio chunk.
-    
-    Args:
-        chunk_path (str): Path to the chunk file
-        chunk_index (int): Index of the chunk
-        
-    Returns:
-        tuple: (success, transcript, error)
     """
     try:
         logger.info(f"Processing chunk {chunk_index}: {chunk_path}")
@@ -138,7 +116,7 @@ def process_audio_chunk(chunk_path, chunk_index):
         recognizer.energy_threshold = 300
         recognizer.dynamic_energy_threshold = False  # Disable for faster processing
         recognizer.pause_threshold = 0.5
-        recognizer.operation_timeout = 30  # 30 second timeout per chunk
+        recognizer.operation_timeout = 30  
         
         with sr.AudioFile(chunk_path) as source:
             # Shorter ambient noise adjustment
@@ -164,13 +142,6 @@ def process_audio_chunk(chunk_path, chunk_index):
 def process_long_audio_parallel(audio_file_path, max_duration=300):
     """
     Process long audio files by splitting into chunks and processing in parallel.
-    
-    Args:
-        audio_file_path (str): Path to the audio file
-        max_duration (int): Maximum duration to process (in seconds)
-        
-    Returns:
-        tuple: (success, transcript, error_message)
     """
     try:
         # Check audio duration first
@@ -495,7 +466,6 @@ def process_audio():
         logger.error(f"Unexpected error in process_audio: {str(e)}")
         return jsonify({"error": f"Unexpected error processing audio: {str(e)}"}), 500
 
-# [Include all your existing helper functions: clean_ai_response, generate_clinical_report, etc.]
 def clean_ai_response(text):
     """Cleans LLM responses by removing <think> sections and non-clinical commentary."""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
@@ -557,9 +527,6 @@ def clean_ai_response(text):
 
 def generate_clinical_report(transcript, template_analysis):
     """Generate HPI summary using AI with the correct template enforced."""
-    # if not client:
-    #     logger.error("Together client not available, using fallback")
-    #     return create_fallback_report(transcript, template_analysis)
     
     selected_template = template_analysis['best_template']
     template_text = template_analysis['template_text']
@@ -642,6 +609,15 @@ PHYSICAL EXAMINATION:
 
 NOTE: Physical examination template ({selected_template}) selected automatically based on keyword analysis. Confidence: {template_analysis['confidence']:.3f}"""
 
+# production env
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# local env
+# if __name__ == '__main__':
+#     print("=== Enhanced AI Scribe App Starting ===")
+#     print(f"Available templates: {template_mapper.get_available_templates()}")
+#     print("Template integration: ENABLED")
+#     print("Server starting on http://localhost:5000")
+#     app.run(debug=True)
