@@ -48,7 +48,7 @@ Straight leg raise negative bilaterally.
 Normal gait without antalgia.
 DRE deferred.
 
-### MaleGU:
+### MaleGU (Genitourinary):
 General: Appears well.
 Neuro: Alert, normal phonation. moving extremities x4.
 Abdo: Soft, non-tender.
@@ -62,7 +62,7 @@ Cremasteric reflex present bilaterally. No perineal tenderness.
 DRE deferred.
 
 
-### MSE:
+### Mental status exam:
 General: Alert, no apparent distress, no apparent intoxication, well-groomed, dressed appropriately.
 Behaviour: Calm, cooperative.
 Neurological: A&Ox3, CN II-XII intact, normal balance, normal coordination, power/sensation normal bilateral, gait normal.
@@ -74,11 +74,11 @@ Judgment: Fair
 Cognition: Not formally tested but grossly intact
 
 
-### MSK:
+### Musculoskeletal:
 Looks well. range of motion and strength adequate. neurovascular intact. no open wound. no swelling or deformities. no bony tenderness. Joint above and below intact. Ligamentous testing intact.
 
 
-### Neuro:
+### Neurological:
 General: Appears well. Alert and oriented x3. No aphasia. No hemispatial neglect.
 Cranial nerves: Visual fields, extraocular movements intact bilaterally, no nystagmus (II, III, IV, VI).
 PERRLA, no eyelid ptosis (III), Facial sensation intact bilaterally, able to clench jaw bilaterally (V)
@@ -134,3 +134,18 @@ Rt lower ext: No sign of injury. Range of motion, neurovascular status intact.
 Lt lower ext: No sign of injury. Range of motion, neurovascular status intact.
 GU and Rectal: Not assessed.
 E-FAST: Not assessed.
+
+### Pediatrics:
+General: Appears well. Normal skin turgor. No jaundice.
+Normal cap refill in extremities.
+Neuro: Alert, moving all extremities, good tone and reflexes x4, pupils are equal, round, and reactive to light and accommodation.
+HEENT: No ocular injection or exudate.
+Normal, moist oropharynx. No cracked lips or strawberry tongue.
+No tonsillar swelling or exudate.
+Normal tympanic membranes bilaterally.
+No cervical lymphadenopathy.
+Neck supple without cervical spine tenderness.
+Cardio: Normal heart sounds without murmur.
+Resp: Lungs clear bilaterally without adventitious sounds.
+Abdo: Soft, non-tender.
+Extremities: No edema bilaterally. No rash, dactylitis or desquamation.
