@@ -281,6 +281,7 @@ def validate_audio_file(file_path):
         return False
 
 def convert_to_wav_ffmpeg(input_path, output_path):
+
     """
     Converts input audio file to .wav using a direct ffmpeg path on Windows.
     """
@@ -304,13 +305,26 @@ def convert_to_wav_ffmpeg(input_path, output_path):
 
     except subprocess.CalledProcessError as e:
         logger.error(f"ffmpeg conversion failed: {e.stderr.decode('utf-8')}")
+
+    try:
+        subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-ar', '16000', '-ac', '1', '-f', 'wav', output_path
+        ], check=True, timeout=30)  # Add timeout
+        logger.info("ffmpeg conversion successful")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffmpeg conversion failed: {e}")
+
         return False
     except subprocess.TimeoutExpired:
         logger.error("ffmpeg conversion timed out")
         return False
+
     except FileNotFoundError as e:
         logger.error(f"FFmpeg not found at specified path: {ffmpeg_path}")
         return False
+
 
 
 def process_audio_with_fallback(audio_file_path):
@@ -360,6 +374,7 @@ def process_audio_with_fallback(audio_file_path):
 def process_audio():
     """Process uploaded audio file and return transcript and summary"""
 
+
     logger.info("Processing audio request received")
 
     try:
@@ -404,6 +419,100 @@ def process_audio():
             return jsonify({"error": "Transcription too short. Please speak more clearly or record longer audio."}), 400
 
         # Analyze transcript
+    
+    logger.info("Processing audio request received")
+    
+    try:
+        # Check if audio file is present
+        if 'audio' not in request.files:
+            logger.error("No audio file provided in request")
+            return jsonify({"error": "No audio file provided"}), 400
+        
+        audio_file = request.files['audio']
+        
+        if audio_file.filename == '':
+            logger.error("No audio file selected")
+            return jsonify({"error": "No audio file selected"}), 400
+        
+        # Get file size
+        audio_file.seek(0, 2)  # Seek to end
+        file_size = audio_file.tell()
+        audio_file.seek(0)  # Seek back to beginning
+        
+        logger.info(f"Audio file received: {audio_file.filename}, size: {file_size} bytes")
+        
+        # Check if file is empty
+        if file_size == 0:
+            logger.error("Received empty audio file")
+            return jsonify({"error": "Audio file is empty. Please record some audio first."}), 400
+        
+        # Check file size limits
+        if file_size > app.config['MAX_CONTENT_LENGTH']:
+            logger.error(f"File too large: {file_size} bytes")
+            return jsonify({"error": "Audio file too large. Please record a shorter message."}), 400
+        
+        # Save the uploaded file temporarily
+        temp_file_path = None
+        
+        try:
+            # Save original file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+                audio_file.save(temp_file.name)
+                temp_file_path = temp_file.name
+                logger.info(f"Audio file saved to: {temp_file_path}")
+            
+            # Log audio file details
+            logger.info(f"Audio file size: {os.path.getsize(temp_file_path)} bytes")
+            
+            # Try to get audio details for debugging
+            try:
+                with wave.open(temp_file_path, 'rb') as wav:
+                    duration = wav.getnframes()/wav.getframerate()
+                    logger.info(f"Audio format - Sample rate: {wav.getframerate()}, Channels: {wav.getnchannels()}, Duration: {duration:.2f}s")
+                    
+                    # Warn if audio is very long
+                    if duration > 300:  # 5 minutes
+                        logger.warning(f"Very long audio detected: {duration:.2f}s")
+            except Exception as e:
+                logger.warning(f"Could not read audio details: {str(e)}")
+            
+            # Validate the audio file
+            if not validate_audio_file(temp_file_path):
+                logger.warning("Audio file validation failed, will attempt processing anyway")
+            
+        except Exception as e:
+            logger.error(f"Error saving/processing audio file: {str(e)}")
+            return jsonify({"error": f"Error processing audio file: {str(e)}"}), 500
+        
+        # Process the audio file with enhanced recognition
+        try:
+            success, transcript, error_message = process_audio_with_fallback(temp_file_path)
+            
+            if not success:
+                logger.error(f"Speech recognition failed: {error_message}")
+                return jsonify({"error": error_message}), 400
+            
+            logger.info(f"Transcribed text: {len(transcript)} chars")
+            
+            # Check if transcription is too short
+            if len(transcript.strip()) < 10:
+                return jsonify({"error": "Transcription too short. Please speak more clearly or record longer audio."}), 400
+            
+        except Exception as e:
+            logger.error(f"Unexpected error during transcription: {str(e)}")
+            return jsonify({"error": f"Unexpected error during transcription: {str(e)}"}), 500
+        
+        finally:
+            # Clean up temporary file
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                    logger.info(f"Temporary file cleaned up: {temp_file_path}")
+                except:
+                    pass
+        
+        # Analyze transcript to determine the correct template
+
         try:
             template_analysis = template_mapper.analyze_transcript(transcript)
             logger.info(f"Template Analysis: {template_analysis}")
@@ -415,6 +524,7 @@ def process_audio():
                 'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
             }
 
+
         # Generate clinical summary
         try:
             clinical_report = generate_clinical_report(transcript, template_analysis)
@@ -425,11 +535,25 @@ def process_audio():
         return jsonify({
             "transcript": transcript,
             "summary": clinical_report,
+
+        
+        # Generate summary with the determined template
+        try:
+            clinical_report = generate_clinical_report(transcript, template_analysis)
+            logger.info("Clinical report generated successfully")
+        except Exception as e:
+            logger.error(f"Error generating clinical report: {str(e)}")
+            clinical_report = create_fallback_report(transcript, template_analysis)
+        
+        return jsonify({
+            "transcript": transcript, 
+            "summary": clinical_report, 
             "template_info": {
                 "selected_template": template_analysis['best_template'],
                 "confidence": template_analysis['confidence']
             }
         })
+
 
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
@@ -444,6 +568,12 @@ def process_audio():
                 os.unlink(converted_path)
         except Exception as cleanup_error:
             logger.warning(f"Failed to clean up temp files: {cleanup_error}")
+
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in process_audio: {str(e)}")
+        return jsonify({"error": f"Unexpected error processing audio: {str(e)}"}), 500
+
 
 def clean_ai_response(text):
     """Cleans LLM responses by removing <think> sections and non-clinical commentary."""

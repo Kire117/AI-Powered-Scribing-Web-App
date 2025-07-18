@@ -22,6 +22,7 @@
             background-color: #4CAF50;
             color: white;
         }
+
         #pauseBtn {
             background-color: #ff9800;
             color: white;
@@ -30,6 +31,8 @@
             background-color: #2196F3;
             color: white;
         }
+
+
         #stopBtn {
             background-color: #f44336;
             color: white;
@@ -80,6 +83,7 @@
     
     <div class="controls">
         <button id="startBtn" onclick="startRecording()">Start Recording</button>
+
         <button id="pauseBtn" onclick="pauseRecording()" disabled>Pause</button>
         <button id="resumeBtn" onclick="resumeRecording()" disabled>Resume</button>
         <button id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
@@ -107,6 +111,22 @@
                 if (isRecording) return;
 
             try {
+    <script>
+        let isRecording = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        // Check for HTTPS
+        // if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        //     document.getElementById('httpsWarning').style.display = 'block';
+        //     document.getElementById('startBtn').disabled = true;
+        // }
+
+        async function startRecording() {
+            if (isRecording) return;
+            
+            try {
+                // Request microphone access
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
                         echoCancellation: true,
@@ -115,14 +135,22 @@
                     }
                 });
 
+
                 audioChunks = [];
                 mediaRecorder = new MediaRecorder(stream);
+
+
+                
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                
 
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
                     }
                 };
+
 
                 mediaRecorder.onstop = () => {
                     processRecording();
@@ -146,10 +174,34 @@
             } catch (error) {
                 console.error('Microphone error:', error);
                 document.getElementById('status').textContent = `Microphone error: ${error.message}`;
+
+                
+                mediaRecorder.onstop = () => {
+                    processRecording();
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('status').textContent = 'Recording patient conversation... Click "Stop Recording" when done.';
+                document.getElementById('status').className = 'status recording';
+                
+                // Clear previous results
+                document.getElementById('transcript').textContent = 'Recording in progress...';
+                document.getElementById('clinical-report').textContent = 'Waiting for transcription to complete...';
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+
                 document.getElementById('status').className = 'status error';
                 resetButtons();
             }
         }
+
 
         function pauseRecording() {
             if (mediaRecorder && isRecording && !isPaused) {
@@ -181,18 +233,54 @@
                 document.getElementById('pauseBtn').disabled = true;
                 document.getElementById('resumeBtn').disabled = true;
             }
+
+        function stopRecording() {
+            if (!isRecording || !mediaRecorder) return;
+            
+            document.getElementById('status').textContent = 'Processing audio...';
+            document.getElementById('transcript').textContent = 'Processing transcription...';
+            document.getElementById('clinical-report').textContent = 'Analyzing transcript and generating documentation...';
+            
+            isRecording = false;
+
+            //Let the `onstop` handle processing and cleanup
+            mediaRecorder.onstop = () => {
+                processRecording();
+
+                // Now it’s safe to stop the stream
+                if (mediaRecorder.stream) {
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                }
+            };
+
+            mediaRecorder.stop();  // flushes final chunk
+            resetButtons();
+
         }
 
         async function processRecording() {
             try {
+
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.webm');
+
+
+                // Create audio blob
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                
+                // Send to backend for processing
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+                
+                document.getElementById('status').textContent = 'Transcribing audio...';
+                
 
                 const response = await fetch('/process_audio', {
                     method: 'POST',
                     body: formData
                 });
+
 
                 const result = await response.json();
 
@@ -212,10 +300,37 @@
             }
 
             resetButtons();
+
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                // Display results
+                document.getElementById('transcript').textContent = result.transcript;
+                document.getElementById('clinical-report').textContent = result.summary;
+                document.getElementById('status').textContent = 'Recording completed successfully!';
+                document.getElementById('status').className = 'status ready';
+                
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                document.getElementById('status').textContent = `Error processing audio: ${error.message}`;
+                document.getElementById('status').className = 'status error';
+                document.getElementById('transcript').textContent = 'Error occurred during processing';
+                document.getElementById('clinical-report').textContent = 'Please try recording again';
+            }
+
         }
 
         function resetButtons() {
             isRecording = false;
+
             isPaused = false;
             mediaRecorder = null;
 
@@ -226,5 +341,10 @@
         }
         </script>
 
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        }
+    </script>
 </body>
 </html>
