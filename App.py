@@ -281,6 +281,31 @@ def validate_audio_file(file_path):
         return False
 
 def convert_to_wav_ffmpeg(input_path, output_path):
+
+    """
+    Converts input audio file to .wav using a direct ffmpeg path on Windows.
+    """
+    ffmpeg_path = r"C:\ffmpeg\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\bin\ffmpeg.exe"  # ← REPLACE this with your actual path
+
+    try:
+        logger.info(f"Converting {input_path} to {output_path} using ffmpeg")
+
+        result = subprocess.run([
+            ffmpeg_path,             # Use full path instead of 'ffmpeg'
+            '-y',
+            '-i', input_path,
+            '-ar', '16000',
+            '-ac', '1',
+            '-f', 'wav',
+            output_path
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
+
+        logger.info("ffmpeg conversion successful")
+        return True
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"ffmpeg conversion failed: {e.stderr.decode('utf-8')}")
+
     try:
         subprocess.run([
             'ffmpeg', '-y', '-i', input_path,
@@ -290,10 +315,17 @@ def convert_to_wav_ffmpeg(input_path, output_path):
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"ffmpeg conversion failed: {e}")
+
         return False
     except subprocess.TimeoutExpired:
         logger.error("ffmpeg conversion timed out")
         return False
+
+    except FileNotFoundError as e:
+        logger.error(f"FFmpeg not found at specified path: {ffmpeg_path}")
+        return False
+
+
 
 def process_audio_with_fallback(audio_file_path):
     """
@@ -341,6 +373,52 @@ def process_audio_with_fallback(audio_file_path):
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
     """Process uploaded audio file and return transcript and summary"""
+
+
+    logger.info("Processing audio request received")
+
+    try:
+        if 'audio' not in request.files:
+            logger.error("No audio file provided in request")
+            return jsonify({"error": "No audio file provided"}), 400
+
+        audio_file = request.files['audio']
+
+        if audio_file.filename == '':
+            logger.error("No audio file selected")
+            return jsonify({"error": "No audio file selected"}), 400
+
+        # Save uploaded file temporarily (as webm, ogg, etc.)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_file:
+            audio_file.save(temp_file.name)
+            temp_file_path = temp_file.name
+            logger.info(f"Original audio file saved: {temp_file_path}")
+
+        # Convert to proper WAV using ffmpeg
+        converted_path = temp_file_path.replace('.webm', '.wav')
+
+        if not convert_to_wav_ffmpeg(temp_file_path, converted_path):
+            logger.error("Conversion to WAV failed")
+            return jsonify({"error": "Failed to convert audio to supported format"}), 500
+
+        logger.info(f"Converted WAV file: {converted_path}")
+
+        # Optionally check file size and metadata
+        if not validate_audio_file(converted_path):
+            logger.warning("WAV file validation failed")
+            return jsonify({"error": "Invalid or unsupported audio format"}), 400
+
+        # Transcribe using fallback strategy
+        success, transcript, error_message = process_audio_with_fallback(converted_path)
+
+        if not success:
+            logger.error(f"Speech recognition failed: {error_message}")
+            return jsonify({"error": error_message}), 400
+
+        if len(transcript.strip()) < 10:
+            return jsonify({"error": "Transcription too short. Please speak more clearly or record longer audio."}), 400
+
+        # Analyze transcript
     
     logger.info("Processing audio request received")
     
@@ -434,6 +512,7 @@ def process_audio():
                     pass
         
         # Analyze transcript to determine the correct template
+
         try:
             template_analysis = template_mapper.analyze_transcript(transcript)
             logger.info(f"Template Analysis: {template_analysis}")
@@ -444,6 +523,19 @@ def process_audio():
                 'confidence': 0.5,
                 'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
             }
+
+
+        # Generate clinical summary
+        try:
+            clinical_report = generate_clinical_report(transcript, template_analysis)
+        except Exception as e:
+            logger.error(f"Error generating clinical report: {str(e)}")
+            clinical_report = create_fallback_report(transcript, template_analysis)
+
+        return jsonify({
+            "transcript": transcript,
+            "summary": clinical_report,
+
         
         # Generate summary with the determined template
         try:
@@ -461,10 +553,27 @@ def process_audio():
                 "confidence": template_analysis['confidence']
             }
         })
+
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+    finally:
+        # Clean up temporary files
+        try:
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+            if os.path.exists(converted_path):
+                os.unlink(converted_path)
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up temp files: {cleanup_error}")
+
         
     except Exception as e:
         logger.error(f"Unexpected error in process_audio: {str(e)}")
         return jsonify({"error": f"Unexpected error processing audio: {str(e)}"}), 500
+
 
 def clean_ai_response(text):
     """Cleans LLM responses by removing <think> sections and non-clinical commentary."""
