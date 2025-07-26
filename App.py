@@ -28,7 +28,49 @@ except ImportError:
     logger.error("Could not import template_mapper. Make sure the file exists.")
     class TemplateMapper:
         def analyze_transcript(self, text):
-            return {
+            ],
+            stream=False,
+            temperature=0.2, 
+            max_tokens=1500
+        )
+        
+        generated_text = response.choices[0].message.content.strip()
+        cleaned_output = clean_ai_response(generated_text)
+        
+        logger.info(f"Successfully generated clinical report for {selected_template} template")
+        return cleaned_output
+            
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        return create_fallback_report(transcript, template_analysis)
+
+def create_fallback_report(transcript, template_analysis):
+    """Create a basic fallback summary when AI generation fails."""
+    template_text = template_analysis['template_text']
+    selected_template = template_analysis['best_template']
+    
+    return f"""HISTORY OF PRESENT ILLNESS:
+Patient presents with clinical concerns as documented in the interview transcript. Further details available in the recorded conversation.
+
+Transcript summary: {transcript[:300]}{'...' if len(transcript) > 300 else ''}
+
+PHYSICAL EXAMINATION:
+{template_text}
+
+NOTE: Physical examination template ({selected_template}) selected automatically based on keyword analysis. Confidence: {template_analysis['confidence']:.3f}"""
+
+# production env
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+# local env
+# if __name__ == '__main__':
+#     print("=== Enhanced AI Scribe App Starting ===")
+#     print(f"Available templates: {template_mapper.get_available_templates()}")
+#     print("Template integration: ENABLED")
+#     print("Server starting on http://localhost:5000")
+#     app.run(debug=True)return {
                 'best_template': 'general',
                 'confidence': 0.5,
                 'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
@@ -279,9 +321,9 @@ def validate_audio_file(file_path):
         return False
 
 def convert_to_wav_ffmpeg(input_path, output_path):
-    # Full path to ffmpeg.exe — replace with your actual path
-    ffmpeg_path = r"C:\ffmpeg\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\bin\ffmpeg.exe"
-
+    # Use system ffmpeg - should be installed in the container
+    ffmpeg_path = "ffmpeg"  # Use system PATH
+    
     try:
         logger.info(f"Converting {input_path} to {output_path} using ffmpeg")
 
@@ -302,7 +344,7 @@ def convert_to_wav_ffmpeg(input_path, output_path):
         logger.error(f"ffmpeg conversion failed: {e.stderr.decode('utf-8')}")
         return False
     except FileNotFoundError as e:
-        logger.error(f"FileNotFoundError: {str(e)} - Tried path: {ffmpeg_path}")
+        logger.error(f"FileNotFoundError: ffmpeg not found in system PATH. Error: {str(e)}")
         return False
     except subprocess.TimeoutExpired:
         logger.error("ffmpeg conversion timed out")
@@ -438,7 +480,6 @@ def process_audio():
                 os.unlink(converted_path)
         except Exception as cleanup_error:
             logger.warning(f"Failed to clean up temp files: {cleanup_error}")
-
 
 def clean_ai_response(text):
     """Cleans LLM responses by removing <think> sections and non-clinical commentary."""
