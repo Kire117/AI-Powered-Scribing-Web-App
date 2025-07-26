@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>AI Scribe App</title>
@@ -17,14 +17,14 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-
             color: white;
         }
         #startBtn { background-color: #4CAF50; }
         #stopBtn { background-color: #f44336; }
         #pauseBtn { background-color: #ff9800; }
         #resumeBtn { background-color: #2196F3; }
-        #startBtn:disabled, #stopBtn:disabled, #pauseBtn:disabled, #resumeBtn:disabled {
+        #processBtn { background-color: #9C27B0; }
+        #startBtn:disabled, #stopBtn:disabled, #pauseBtn:disabled, #resumeBtn:disabled, #processBtn:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
@@ -37,6 +37,7 @@
         .status.ready { background-color: #e8f5e8; color: #2e7d32; }
         .status.recording { background-color: #fff3cd; color: #856404; }
         .status.paused { background-color: #e3f2fd; color: #0d47a1; }
+        .status.processing { background-color: #f3e5f5; color: #4a148c; }
         .status.error { background-color: #ffebee; color: #c62828; }
         .result-section {
             margin-top: 20px;
@@ -61,6 +62,7 @@
         <button id="pauseBtn" disabled>Pause</button>
         <button id="resumeBtn" disabled>Resume</button>
         <button id="stopBtn" disabled>Stop Recording</button>
+        <button id="processBtn" disabled>Process Documentation</button>
     </div>
 
     <div id="status" class="status ready">Ready to record patient conversation</div>
@@ -72,19 +74,20 @@
 
     <div class="result-section">
         <p><strong>Medical Documentation (HPI & Physical Examination):</strong></p>
-        <div id="result">Complete documentation will appear here after processing transcription...</div>
+        <div id="result" class="clinical-report">Complete documentation will appear here after processing transcription...</div>
     </div>
 
     <script>
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
-    let flushInterval;
+    let recordedAudioBlob = null;
 
     const startBtn = document.getElementById("startBtn");
     const pauseBtn = document.getElementById("pauseBtn");
     const resumeBtn = document.getElementById("resumeBtn");
     const stopBtn = document.getElementById("stopBtn");
+    const processBtn = document.getElementById("processBtn");
     const statusMsg = document.getElementById("status");
 
     function setStatus(message, statusClass) {
@@ -98,28 +101,27 @@
             mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
             audioChunks = [];
+            recordedAudioBlob = null;
+
             mediaRecorder.ondataavailable = event => {
                 if (event.data.size > 0) {
                     audioChunks.push(event.data);
                 }
             };
 
-            mediaRecorder.onstop = processRecording;
+            mediaRecorder.onstop = () => {
+                recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            };
 
             mediaRecorder.start();
             isRecording = true;
 
-            flushInterval = setInterval(() => {
-                if (mediaRecorder && mediaRecorder.state === "recording") {
-                    mediaRecorder.requestData();
-                }
-            }, 60000);
-
-            setStatus("Recording started...", "recording");
+            setStatus("Recording patient conversation...", "recording");
             startBtn.disabled = true;
             pauseBtn.disabled = false;
             resumeBtn.disabled = true;
             stopBtn.disabled = false;
+            processBtn.disabled = true;
 
         } catch (err) {
             console.error("Microphone error:", err);
@@ -133,7 +135,7 @@
             mediaRecorder.pause();
             pauseBtn.disabled = true;
             resumeBtn.disabled = false;
-            setStatus("Recording paused.", "paused");
+            setStatus("Recording paused - Resume when ready", "paused");
         }
     };
 
@@ -142,29 +144,37 @@
             mediaRecorder.resume();
             pauseBtn.disabled = false;
             resumeBtn.disabled = true;
-            setStatus("Recording resumed.", "recording");
+            setStatus("Recording resumed", "recording");
         }
     };
 
     stopBtn.onclick = () => {
         if (mediaRecorder && isRecording) {
             mediaRecorder.stop();
-            clearInterval(flushInterval);
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
             isRecording = false;
 
+            setStatus("Recording stopped - Ready to process", "ready");
             startBtn.disabled = false;
             pauseBtn.disabled = true;
             resumeBtn.disabled = true;
             stopBtn.disabled = true;
-
-            setStatus("Recording stopped. Processing...", "ready");
+            processBtn.disabled = false; // Enable processing
         }
     };
 
-    async function processRecording() {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    processBtn.onclick = async () => {
+        if (!recordedAudioBlob) {
+            alert("No recording available to process!");
+            return;
+        }
+
+        setStatus("Processing audio and generating documentation...", "processing");
+        processBtn.disabled = true;
+        document.getElementById("result").textContent = "Processing your recording...";
+
         const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('audio', recordedAudioBlob, 'recording.webm');
 
         try {
             const response = await fetch('/process_audio', {
@@ -175,10 +185,14 @@
             const data = await response.json();
 
             if (response.ok) {
-                // ✅ Use .textContent for safe insertion
                 document.getElementById("audioResult").textContent = data.transcript || 'No transcription received.';
                 document.getElementById("result").textContent = data.summary || 'No documentation received.';
-                setStatus("Recording and processing complete.", "ready");
+                setStatus("Documentation complete", "ready");
+                
+                // Reset for next patient
+                recordedAudioBlob = null;
+                audioChunks = [];
+                
             } else {
                 throw new Error(data.error || "Unknown error occurred");
             }
@@ -186,11 +200,12 @@
         } catch (err) {
             console.error("Error processing:", err);
             document.getElementById("audioResult").textContent = '';
-            document.getElementById("result").innerHTML = `<div class="alert alert-danger">
-            Error: Could not process audio. ${error.message}</div>`;
-            setStatus("Error during processing.", "error");
+            document.getElementById("result").innerHTML = `<div style="color: #c62828;">Error: Could not process audio. ${err.message}</div>`;
+            setStatus("Error during processing", "error");
+        } finally {
+            processBtn.disabled = false;
         }
-    }
+    };
     </script>
 
 </body>
