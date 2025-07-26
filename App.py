@@ -1,4 +1,3 @@
-# app.py - Optimized version for long audio processing
 from flask import Flask, render_template, request, jsonify
 import speech_recognition as sr
 import os
@@ -17,7 +16,6 @@ import math
 from threading import Thread
 import queue
 import time
-
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +41,7 @@ client = Together(api_key=os.environ.get("TOGETHER_API_KEY"))
 
 app = Flask(__name__)
 
-# Configure upload settings
+# Configure upload settings  
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32MB max file size
 
 # Initialize the template mapper
@@ -281,9 +279,9 @@ def validate_audio_file(file_path):
         return False
 
 def convert_to_wav_ffmpeg(input_path, output_path):
-    # Full path to ffmpeg.exe — replace with your actual path
-    ffmpeg_path = r"C:\ffmpeg\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\ffmpeg-2025-07-12-git-35a6de137a-essentials_build\bin\ffmpeg.exe"
-
+    # Use system ffmpeg - should be installed in the container
+    ffmpeg_path = "ffmpeg"  # Use system PATH
+    
     try:
         logger.info(f"Converting {input_path} to {output_path} using ffmpeg")
 
@@ -304,15 +302,11 @@ def convert_to_wav_ffmpeg(input_path, output_path):
         logger.error(f"ffmpeg conversion failed: {e.stderr.decode('utf-8')}")
         return False
     except FileNotFoundError as e:
-        logger.error(f"FileNotFoundError: {str(e)} - Tried path: {ffmpeg_path}")
+        logger.error(f"FileNotFoundError: ffmpeg not found in system PATH. Error: {str(e)}")
         return False
     except subprocess.TimeoutExpired:
         logger.error("ffmpeg conversion timed out")
         return False
-
-
-
-
 
 def process_audio_with_fallback(audio_file_path):
     """
@@ -360,8 +354,6 @@ def process_audio_with_fallback(audio_file_path):
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
     """Process uploaded audio file and return transcript and summary"""
-
-
     logger.info("Processing audio request received")
 
     try:
@@ -405,9 +397,7 @@ def process_audio():
         if len(transcript.strip()) < 10:
             return jsonify({"error": "Transcription too short. Please speak more clearly or record longer audio."}), 400
 
-
         # Analyze transcript
-
         try:
             template_analysis = template_mapper.analyze_transcript(transcript)
             logger.info(f"Template Analysis: {template_analysis}")
@@ -418,7 +408,6 @@ def process_audio():
                 'confidence': 0.5,
                 'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
             }
-
 
         # Generate clinical summary
         try:
@@ -436,7 +425,6 @@ def process_audio():
             }
         })
 
-
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
@@ -444,14 +432,12 @@ def process_audio():
     finally:
         # Clean up temporary files
         try:
-            if os.path.exists(temp_file_path):
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
-            if os.path.exists(converted_path):
+            if 'converted_path' in locals() and os.path.exists(converted_path):
                 os.unlink(converted_path)
         except Exception as cleanup_error:
             logger.warning(f"Failed to clean up temp files: {cleanup_error}")
-
-
 
 
 def clean_ai_response(text):
