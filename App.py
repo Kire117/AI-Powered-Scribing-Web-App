@@ -28,49 +28,7 @@ except ImportError:
     logger.error("Could not import template_mapper. Make sure the file exists.")
     class TemplateMapper:
         def analyze_transcript(self, text):
-            ],
-            stream=False,
-            temperature=0.2, 
-            max_tokens=1500
-        )
-        
-        generated_text = response.choices[0].message.content.strip()
-        cleaned_output = clean_ai_response(generated_text)
-        
-        logger.info(f"Successfully generated clinical report for {selected_template} template")
-        return cleaned_output
-            
-    except Exception as e:
-        logger.error(f"Error generating summary: {str(e)}")
-        return create_fallback_report(transcript, template_analysis)
-
-def create_fallback_report(transcript, template_analysis):
-    """Create a basic fallback summary when AI generation fails."""
-    template_text = template_analysis['template_text']
-    selected_template = template_analysis['best_template']
-    
-    return f"""HISTORY OF PRESENT ILLNESS:
-Patient presents with clinical concerns as documented in the interview transcript. Further details available in the recorded conversation.
-
-Transcript summary: {transcript[:300]}{'...' if len(transcript) > 300 else ''}
-
-PHYSICAL EXAMINATION:
-{template_text}
-
-NOTE: Physical examination template ({selected_template}) selected automatically based on keyword analysis. Confidence: {template_analysis['confidence']:.3f}"""
-
-# production env
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
-
-# local env
-# if __name__ == '__main__':
-#     print("=== Enhanced AI Scribe App Starting ===")
-#     print(f"Available templates: {template_mapper.get_available_templates()}")
-#     print("Template integration: ENABLED")
-#     print("Server starting on http://localhost:5000")
-#     app.run(debug=True)return {
+            return {
                 'best_template': 'general',
                 'confidence': 0.5,
                 'template_text': 'GENERAL:\nVital signs stable.\nExamination findings documented.'
@@ -480,6 +438,7 @@ def process_audio():
                 os.unlink(converted_path)
         except Exception as cleanup_error:
             logger.warning(f"Failed to clean up temp files: {cleanup_error}")
+
 
 def clean_ai_response(text):
     """Cleans LLM responses by removing <think> sections and non-clinical commentary."""
